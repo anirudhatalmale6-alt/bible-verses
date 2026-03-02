@@ -1,0 +1,2041 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Bible Verse Display</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Inter:wght@300;400;600;800&family=Montserrat:wght@300;400;600;800&family=Open+Sans:wght@300;400;600;800&family=Pacifico&family=Poppins:wght@300;400;600;800&family=Roboto:wght@300;400;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --fg:#ffffff;
+      --muted:rgba(255,255,255,.70);
+      --glass:rgba(255,255,255,.08);
+      --glass2:rgba(255,255,255,.12);
+      --border:rgba(255,255,255,.18);
+
+      --ui-scale: 1.0;
+      --verse-size: 48px;
+      --ref-size: 22px;
+
+      --verse-font: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      --ref-font: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+
+      --menu-opacity: 0.86;
+
+      /* Text styling controls */
+      --text-color: #ffffff;
+      --text-shadow-strength: 22px; /* 0 disables */
+      --text-stroke-width: 0px;
+      --text-stroke-color: rgba(0,0,0,0.85);
+
+      /* Background shade overlay (0 = none) */
+      --bg-shade-strength: 0.00;
+    }
+
+    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+    html,body{ height:100%; }
+    body{ margin:0; overflow:hidden; background:#000; color: var(--fg); }
+
+    .bg{ position:fixed; inset:0; z-index:0; overflow:hidden; background:#000; }
+    .bgLayer{
+      position:absolute; inset:0;
+      background-size: cover;      /* fill screen */
+      background-position: center; /* center crop */
+      background-repeat: no-repeat;
+      filter:none;                 /* no haze/blur/brightness changes */
+      transform: scale(1.02);
+      opacity:0;
+      transition: opacity 1400ms ease;
+      will-change: transform, opacity;
+    }
+    .bgLayer.on{ opacity:1; }
+
+    .bgShade{
+      position:absolute; inset:0; pointer-events:none;
+      opacity: var(--bg-shade-strength);
+      background:
+        radial-gradient(900px 700px at 50% 20%, rgba(0,0,0,.22), rgba(0,0,0,.62)),
+        linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.60));
+    }
+
+    .ui{
+      position:fixed; inset:0; z-index:1;
+      display:flex; align-items:center; justify-content:center;
+      padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+               max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    }
+
+    .stage{
+      width:min(1200px, 100%);
+      height:100%;
+      display:flex; flex-direction:column;
+      justify-content:center;
+      gap: 18px;
+      transform: scale(var(--ui-scale));
+      transform-origin: center;
+      user-select:none;
+      transition: opacity 600ms ease;
+    }
+
+    .ref{
+      font-family: var(--ref-font);
+      font-size: var(--ref-size);
+      font-weight: 800;
+      text-align:center;
+      color: var(--text-color);
+      -webkit-text-stroke: var(--text-stroke-width) var(--text-stroke-color);
+      text-shadow: 0 2px var(--text-shadow-strength) rgba(0,0,0,0.55);
+    }
+
+    .verse{
+      font-family: var(--verse-font);
+      font-size: var(--verse-size);
+      line-height: 1.25;
+      font-weight: 650;
+      text-align:center;
+      white-space: pre-wrap;
+      padding: 0 10px;
+      color: var(--text-color);
+      -webkit-text-stroke: var(--text-stroke-width) var(--text-stroke-color);
+      text-shadow: 0 2px var(--text-shadow-strength) rgba(0,0,0,0.55);
+    }
+
+    .footer{
+      margin-top: 8px;
+      font-family: var(--ref-font);
+      font-size: calc(var(--ref-size) * 0.75);
+      color: color-mix(in srgb, var(--text-color) 78%, transparent);
+      text-align:center;
+      text-shadow: 0 1px calc(var(--text-shadow-strength) * 0.55) rgba(0,0,0,0.35);
+    }
+
+    .topbar{
+      position:fixed; z-index:2;
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      display:flex; align-items:center; justify-content:space-between;
+      gap: 10px;
+      pointer-events:none;
+    }
+
+    .pill{
+      pointer-events:auto;
+      border:1px solid var(--border);
+      background: var(--glass);
+      color: #fff;
+      border-radius:999px;
+      padding: 10px 12px;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      display:flex; align-items:center; gap: 8px;
+      backdrop-filter: blur(10px);
+      max-width: min(62vw, 620px);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .btn{
+      pointer-events:auto;
+      border:1px solid var(--border);
+      background: var(--glass);
+      color: #fff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      cursor:pointer;
+      backdrop-filter: blur(10px);
+    }
+    .btn:hover{ background: var(--glass2); }
+    .btn:active{ transform: translateY(1px); }
+
+    .hint{
+      pointer-events:none;
+      position:fixed; z-index:2;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      left: 0; right:0;
+      text-align:center;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: var(--muted);
+      opacity: .88;
+    }
+
+    /* Right-side settings drawer */
+    .panelWrap{
+      position:fixed; top:0; right:0; bottom:0;
+      width: min(420px, 92vw);
+      z-index: 6;
+      transform: translateX(110%);
+      transition: transform 220ms ease;
+      pointer-events:none;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+               max(12px, env(safe-area-inset-bottom)) 12px;
+    }
+    .panelWrap.open{ transform: translateX(0%); pointer-events:auto; }
+    
+    .panel{
+      height:100%;
+      border:1px solid var(--border);
+      background: rgba(12,14,20,var(--menu-opacity));
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(14px);
+      color:#fff;
+      display:flex;
+      flex-direction: column;
+      overflow:hidden; /* keep footer fixed */
+    }
+    .panelScroll{
+      overflow:auto;
+      padding-right: 2px;
+      flex: 1 1 auto;
+    }
+    .panelFooter{
+      flex: 0 0 auto;
+      padding-top: 10px;
+    }
+    .panel h2{
+      margin: 0 0 10px 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 18px;
+    }
+    .grid{ display:grid; grid-template-columns: 1fr; gap: 12px; }
+    .field{
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .field label{
+      display:block;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      color: rgba(255,255,255,.78);
+      margin-bottom: 8px;
+    }
+    select, input[type="range"], input[type="number"], input[type="color"]{
+      width:100%;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      padding: 10px 10px;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.07);
+      color: #fff;
+      outline:none;
+    }
+    input[type="number"]{ padding: 10px 12px; }
+    input[type="color"]{ height: 42px; padding: 6px; }
+    .row{ display:flex; gap: 10px; align-items:center; justify-content:flex-end; margin-top: 12px; flex-wrap: wrap; }
+    .smallNote{
+      margin-top: 10px;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: rgba(255,255,255,.70);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  
+    body.chromeHidden .topbar,
+    body.chromeHidden .hint{
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease;
+    }
+    body .topbar,
+    body .hint{
+      transition: opacity 220ms ease;
+    }
+    body.chromeHidden #metaOut{
+      display: none;
+    }
+    </style>
+</head>
+
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bgLayer" id="bgA"></div>
+    <div class="bgLayer" id="bgB"></div>
+    <div class="bgShade" id="bgShade"></div>
+  </div>
+
+  <div class="topbar">
+    <div class="pill">Bible API - <span id="statusText">starting</span></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn" id="btnPrev" title="Previous verse">Prev</button>
+      <button class="btn" id="btnNext" title="Next verse">Next</button>
+      <button class="btn" id="btnMusicToggle" title="Toggle music">Music</button>
+      <button class="btn" id="btnSettings" title="Settings">Settings</button>
+    </div>
+  </div>
+
+  <div class="ui" id="tapArea" aria-label="Tap or click to advance">
+    <div class="stage" id="stage">
+      <div class="ref" id="refOut">-</div>
+      <div class="verse" id="verseOut">Loading...</div>
+      <div class="footer" id="metaOut"></div>
+    </div>
+  </div>
+
+  <div class="hint">Tap anywhere or press Space for next verse - Press S for settings</div>
+
+  <div class="panelWrap" id="panelWrap" aria-label="Settings">
+    <div class="panel">
+      <h2>Settings</h2>
+
+      <div class="panelScroll" id="panelScroll">
+        <div class="grid">
+        <div class="field">
+          <label>Translation</label>
+          <select id="translationSelect"></select>
+          <div class="smallNote">
+            This works even if the translation list fails to load (fallback options are built in).
+          </div>
+        </div>
+
+        
+        <div class="field">
+          <label>Verse source</label>
+          <select id="verseSource">
+            <option value="curated">Curated references (local list)</option>
+            <option value="api">Bible API random</option>
+          </select>
+          <div class="smallNote">Curated mode picks from the local reference list (English references) and fetches text per translation. API mode uses bible-api.com random.</div>
+        </div>
+
+<div class="field">
+          <label>Random source</label>
+          <select id="randomScope">
+            <option value="all">All books</option>
+            <option value="NT">New Testament</option>
+            <option value="OT">Old Testament</option>
+            <option value="GOS">Gospels (MAT, MRK, LUK, JHN)</option>
+            <option value="PSA">Psalms (PSA)</option>
+            <option value="PRO">Proverbs (PRO)</option>
+          </select>
+          <div class="smallNote">Note: some translations do not support scoped random (NT/OT/etc). This app auto-falls back.</div>
+        </div>
+
+        <div class="field">
+          <label>Cycle languages (same verse in 1-3 translations)</label>
+          <select id="cycleMode">
+            <option value="0">Off</option>
+            <option value="1">On</option>
+          </select>
+          <div class="smallNote">When On: Translation 1 -> 2 -> 3 (if set), then a NEW verse starts again at Translation 1.</div>
+        </div>
+
+        <div class="field">
+          <label>Translation 1</label>
+          <select id="cycleT1"></select>
+        </div>
+
+        <div class="field">
+          <label>Translation 2</label>
+          <select id="cycleT2"></select>
+        </div>
+
+        <div class="field">
+          <label>Translation 3</label>
+          <select id="cycleT3"></select>
+        </div>
+
+        <div class="field">
+          <label>Blank time between translations (seconds)</label>
+          <input id="transBlankSec" type="number" min="0" max="3600" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Blank time between NEW verses (seconds)</label>
+          <input id="verseGapSec" type="number" min="0" max="3600" step="1" />
+        </div>
+
+
+        <div class="field">
+          <label>UI scale (everything)</label>
+          <input id="uiScale" type="range" min="0.70" max="1.40" step="0.01" />
+        </div>
+
+        <div class="field">
+          <label>Verse text size</label>
+          <input id="verseSize" type="range" min="20" max="86" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Reference size</label>
+          <input id="refSize" type="range" min="12" max="42" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Verse font (15 options)</label>
+          <select id="verseFont"></select>
+        </div>
+
+        <div class="field">
+          <label>Reference font (15 options)</label>
+          <select id="refFont"></select>
+        </div>
+
+        <div class="field">
+          <label>Menu background opacity</label>
+          <input id="menuOpacity" type="range" min="0.20" max="0.98" step="0.01" />
+        </div>
+
+        <div class="field">
+          <label>Background shade strength (0 = none)</label>
+          <input id="bgShadeStrength" type="range" min="0.00" max="0.85" step="0.01" />
+        </div>
+
+        <div class="field">
+          <label>Full screen mode (hide controls after 5s)</label>
+          <select id="fullScreenMode">
+            <option value="0">Off</option>
+            <option value="1">On</option>
+          </select>
+          <div class="smallNote">When On: top buttons and hints hide after 5 seconds of no taps. Tap to show again. Also hides the translation line below the verse.</div>
+        </div>
+
+
+        <div class="field">
+          <label>Text color</label>
+          <input id="textColor" type="color" />
+        </div>
+
+        <div class="field">
+          <label>Text shadow</label>
+          <select id="textShadowOn">
+            <option value="1">On</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Shadow strength</label>
+          <input id="textShadowStrength" type="range" min="0" max="44" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Text border (stroke) width</label>
+          <input id="textStrokeWidth" type="range" min="0" max="4" step="0.25" />
+        </div>
+
+        <div class="field">
+          <label>Text border (stroke) color</label>
+          <input id="textStrokeColor" type="color" />
+        </div>
+
+        
+        <div class="field">
+          <label>Music</label>
+          <select id="musicEnabled">
+            <option value="1">On</option>
+            <option value="0">Off</option>
+          </select>
+          <div class="smallNote">iOS requires one tap before audio can start. First tap will start music if On.</div>
+        </div>
+
+        <div class="field">
+          <label>Music volume</label>
+          <input id="musicVolume" type="range" min="0" max="1" step="0.01" />
+        </div>
+
+        <div class="field">
+          <label>Shuffle songs</label>
+          <select id="musicShuffle">
+            <option value="1">On</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Song crossfade time (seconds)</label>
+          <input id="musicCrossfadeSec" type="range" min="0" max="8" step="0.1" />
+        </div>
+
+<div class="field">
+          <label>Verse ON time (seconds)</label>
+          <input id="verseOnSec" type="number" min="1" max="3600" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Blank time between verses (seconds)</label>
+          <input id="verseBlankSec" type="number" min="0" max="3600" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Image stay time (seconds)</label>
+          <input id="bgStaySec" type="number" min="2" max="3600" step="1" />
+        </div>
+
+        <div class="field">
+          <label>Image fade time (seconds)</label>
+          <input id="bgFadeSec" type="number" min="0" max="30" step="0.1" />
+        </div>
+
+        <div class="field">
+          <label>Zoom amount (Ken Burns)</label>
+          <input id="bgZoom" type="range" min="1.00" max="1.30" step="0.01" />
+        </div>
+        </div>
+      </div>
+
+      <div class="panelFooter">
+        <div class="row">
+          <button class="btn" id="btnPageUp" title="Page up">Up</button>
+          <button class="btn" id="btnPageDown" title="Page down">Down</button>
+        </div>
+        <div class="row">
+
+        <button class="btn" id="btnNewBg">New image now</button>
+        <button class="btn" id="btnReset">Reset</button>
+        <button class="btn" id="btnClose">Close</button>
+      </div>
+
+      <div class="smallNote">
+        This version loads background images and MP3 files from the same folder as this HTML file.
+      </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+
+(() => {
+  const API_BASE = "https://bible-api.com";
+
+  // Fetch helper: timeout + abortable verse fetches (prevents "hang forever" on bad networks)
+  let verseFetchCtrl = null;
+  function abortVerseFetch(){
+    if(verseFetchCtrl){
+      try{ verseFetchCtrl.abort(); }catch(e){}
+      verseFetchCtrl = null;
+    }
+  }
+  async function fetchJsonWithTimeout(url, { timeoutMs = 12000, controller = null } = {}){
+    const ctrl = controller || new AbortController();
+    const t = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, timeoutMs);
+    try{
+      const r = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+      if(!r.ok) throw new Error(`Request failed (${r.status})`);
+      return await r.json();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // Curated reference list (English references). Replace with your own list anytime.
+  const CURATED_REFS = ["Genesis 1:1", "Genesis 2:1", "Genesis 3:1", "Genesis 4:1", "Genesis 5:1", "Genesis 6:1", "Genesis 7:1", "Genesis 8:1", "Genesis 9:1", "Genesis 10:1", "Genesis 11:1", "Genesis 12:1", "Genesis 13:1", "Genesis 14:1", "Genesis 15:1", "Genesis 16:1", "Genesis 17:1", "Genesis 18:1", "Genesis 19:1", "Genesis 20:1", "Genesis 21:1", "Genesis 22:1", "Genesis 23:1", "Genesis 24:1", "Genesis 25:1", "Genesis 26:1", "Genesis 27:1", "Genesis 28:1", "Genesis 29:1", "Genesis 30:1", "Genesis 31:1", "Genesis 32:1", "Genesis 33:1", "Genesis 34:1", "Genesis 35:1", "Genesis 36:1", "Genesis 37:1", "Genesis 38:1", "Genesis 39:1", "Genesis 40:1", "Genesis 41:1", "Genesis 42:1", "Genesis 43:1", "Genesis 44:1", "Genesis 45:1", "Genesis 46:1", "Genesis 47:1", "Genesis 48:1", "Genesis 49:1", "Genesis 50:1", "Exodus 1:1", "Exodus 2:1", "Exodus 3:1", "Exodus 4:1", "Exodus 5:1", "Exodus 6:1", "Exodus 7:1", "Exodus 8:1", "Exodus 9:1", "Exodus 10:1", "Exodus 11:1", "Exodus 12:1", "Exodus 13:1", "Exodus 14:1", "Exodus 15:1", "Exodus 16:1", "Exodus 17:1", "Exodus 18:1", "Exodus 19:1", "Exodus 20:1", "Exodus 21:1", "Exodus 22:1", "Exodus 23:1", "Exodus 24:1", "Exodus 25:1", "Exodus 26:1", "Exodus 27:1", "Exodus 28:1", "Exodus 29:1", "Exodus 30:1", "Exodus 31:1", "Exodus 32:1", "Exodus 33:1", "Exodus 34:1", "Exodus 35:1", "Exodus 36:1", "Exodus 37:1", "Exodus 38:1", "Exodus 39:1", "Exodus 40:1", "Leviticus 1:1", "Leviticus 2:1", "Leviticus 3:1", "Leviticus 4:1", "Leviticus 5:1", "Leviticus 6:1", "Leviticus 7:1", "Leviticus 8:1", "Leviticus 9:1", "Leviticus 10:1", "Leviticus 11:1", "Leviticus 12:1", "Leviticus 13:1", "Leviticus 14:1", "Leviticus 15:1", "Leviticus 16:1", "Leviticus 17:1", "Leviticus 18:1", "Leviticus 19:1", "Leviticus 20:1", "Leviticus 21:1", "Leviticus 22:1", "Leviticus 23:1", "Leviticus 24:1", "Leviticus 25:1", "Leviticus 26:1", "Leviticus 27:1", "Numbers 1:1", "Numbers 2:1", "Numbers 3:1", "Numbers 4:1", "Numbers 5:1", "Numbers 6:1", "Numbers 7:1", "Numbers 8:1", "Numbers 9:1", "Numbers 10:1", "Numbers 11:1", "Numbers 12:1", "Numbers 13:1", "Numbers 14:1", "Numbers 15:1", "Numbers 16:1", "Numbers 17:1", "Numbers 18:1", "Numbers 19:1", "Numbers 20:1", "Numbers 21:1", "Numbers 22:1", "Numbers 23:1", "Numbers 24:1", "Numbers 25:1", "Numbers 26:1", "Numbers 27:1", "Numbers 28:1", "Numbers 29:1", "Numbers 30:1", "Numbers 31:1", "Numbers 32:1", "Numbers 33:1", "Numbers 34:1", "Numbers 35:1", "Numbers 36:1", "Deuteronomy 1:1", "Deuteronomy 2:1", "Deuteronomy 3:1", "Deuteronomy 4:1", "Deuteronomy 5:1", "Deuteronomy 6:1", "Deuteronomy 7:1", "Deuteronomy 8:1", "Deuteronomy 9:1", "Deuteronomy 10:1", "Deuteronomy 11:1", "Deuteronomy 12:1", "Deuteronomy 13:1", "Deuteronomy 14:1", "Deuteronomy 15:1", "Deuteronomy 16:1", "Deuteronomy 17:1", "Deuteronomy 18:1", "Deuteronomy 19:1", "Deuteronomy 20:1", "Deuteronomy 21:1", "Deuteronomy 22:1", "Deuteronomy 23:1", "Deuteronomy 24:1", "Deuteronomy 25:1", "Deuteronomy 26:1", "Deuteronomy 27:1", "Deuteronomy 28:1", "Deuteronomy 29:1", "Deuteronomy 30:1", "Deuteronomy 31:1", "Deuteronomy 32:1", "Deuteronomy 33:1", "Deuteronomy 34:1", "Joshua 1:1", "Joshua 2:1", "Joshua 3:1", "Joshua 4:1", "Joshua 5:1", "Joshua 6:1", "Joshua 7:1", "Joshua 8:1", "Joshua 9:1", "Joshua 10:1", "Joshua 11:1", "Joshua 12:1", "Joshua 13:1", "Joshua 14:1", "Joshua 15:1", "Joshua 16:1", "Joshua 17:1", "Joshua 18:1", "Joshua 19:1", "Joshua 20:1", "Joshua 21:1", "Joshua 22:1", "Joshua 23:1", "Joshua 24:1", "Judges 1:1", "Judges 2:1", "Judges 3:1", "Judges 4:1", "Judges 5:1", "Judges 6:1", "Judges 7:1", "Judges 8:1", "Judges 9:1", "Judges 10:1", "Judges 11:1", "Judges 12:1", "Judges 13:1", "Judges 14:1", "Judges 15:1", "Judges 16:1", "Judges 17:1", "Judges 18:1", "Judges 19:1", "Judges 20:1", "Judges 21:1", "Ruth 1:1", "Ruth 2:1", "Ruth 3:1", "Ruth 4:1", "1 Samuel 1:1", "1 Samuel 2:1", "1 Samuel 3:1", "1 Samuel 4:1", "1 Samuel 5:1", "1 Samuel 6:1", "1 Samuel 7:1", "1 Samuel 8:1", "1 Samuel 9:1", "1 Samuel 10:1", "1 Samuel 11:1", "1 Samuel 12:1", "1 Samuel 13:1", "1 Samuel 14:1", "1 Samuel 15:1", "1 Samuel 16:1", "1 Samuel 17:1", "1 Samuel 18:1", "1 Samuel 19:1", "1 Samuel 20:1", "1 Samuel 21:1", "1 Samuel 22:1", "1 Samuel 23:1", "1 Samuel 24:1", "1 Samuel 25:1", "1 Samuel 26:1", "1 Samuel 27:1", "1 Samuel 28:1", "1 Samuel 29:1", "1 Samuel 30:1", "1 Samuel 31:1", "2 Samuel 1:1", "2 Samuel 2:1", "2 Samuel 3:1", "2 Samuel 4:1", "2 Samuel 5:1", "2 Samuel 6:1", "2 Samuel 7:1", "2 Samuel 8:1", "2 Samuel 9:1", "2 Samuel 10:1", "2 Samuel 11:1", "2 Samuel 12:1", "2 Samuel 13:1", "2 Samuel 14:1", "2 Samuel 15:1", "2 Samuel 16:1", "2 Samuel 17:1", "2 Samuel 18:1", "2 Samuel 19:1", "2 Samuel 20:1", "2 Samuel 21:1", "2 Samuel 22:1", "2 Samuel 23:1", "2 Samuel 24:1", "1 Kings 1:1", "1 Kings 2:1", "1 Kings 3:1", "1 Kings 4:1", "1 Kings 5:1", "1 Kings 6:1", "1 Kings 7:1", "1 Kings 8:1", "1 Kings 9:1", "1 Kings 10:1", "1 Kings 11:1", "1 Kings 12:1", "1 Kings 13:1", "1 Kings 14:1", "1 Kings 15:1", "1 Kings 16:1", "1 Kings 17:1", "1 Kings 18:1", "1 Kings 19:1", "1 Kings 20:1", "1 Kings 21:1", "1 Kings 22:1", "2 Kings 1:1", "2 Kings 2:1", "2 Kings 3:1", "2 Kings 4:1", "2 Kings 5:1", "2 Kings 6:1", "2 Kings 7:1", "2 Kings 8:1", "2 Kings 9:1", "2 Kings 10:1", "2 Kings 11:1", "2 Kings 12:1", "2 Kings 13:1", "2 Kings 14:1", "2 Kings 15:1", "2 Kings 16:1", "2 Kings 17:1", "2 Kings 18:1", "2 Kings 19:1", "2 Kings 20:1", "2 Kings 21:1", "2 Kings 22:1", "2 Kings 23:1", "2 Kings 24:1", "2 Kings 25:1", "1 Chronicles 1:1", "1 Chronicles 2:1", "1 Chronicles 3:1", "1 Chronicles 4:1", "1 Chronicles 5:1", "1 Chronicles 6:1", "1 Chronicles 7:1", "1 Chronicles 8:1", "1 Chronicles 9:1", "1 Chronicles 10:1", "1 Chronicles 11:1", "1 Chronicles 12:1", "1 Chronicles 13:1", "1 Chronicles 14:1", "1 Chronicles 15:1", "1 Chronicles 16:1", "1 Chronicles 17:1", "1 Chronicles 18:1", "1 Chronicles 19:1", "1 Chronicles 20:1", "1 Chronicles 21:1", "1 Chronicles 22:1", "1 Chronicles 23:1", "1 Chronicles 24:1", "1 Chronicles 25:1", "1 Chronicles 26:1", "1 Chronicles 27:1", "1 Chronicles 28:1", "1 Chronicles 29:1", "2 Chronicles 1:1", "2 Chronicles 2:1", "2 Chronicles 3:1", "2 Chronicles 4:1", "2 Chronicles 5:1", "2 Chronicles 6:1", "2 Chronicles 7:1", "2 Chronicles 8:1", "2 Chronicles 9:1", "2 Chronicles 10:1", "2 Chronicles 11:1", "2 Chronicles 12:1", "2 Chronicles 13:1", "2 Chronicles 14:1", "2 Chronicles 15:1", "2 Chronicles 16:1", "2 Chronicles 17:1", "2 Chronicles 18:1", "2 Chronicles 19:1", "2 Chronicles 20:1", "2 Chronicles 21:1", "2 Chronicles 22:1", "2 Chronicles 23:1", "2 Chronicles 24:1", "2 Chronicles 25:1", "2 Chronicles 26:1", "2 Chronicles 27:1", "2 Chronicles 28:1", "2 Chronicles 29:1", "2 Chronicles 30:1", "2 Chronicles 31:1", "2 Chronicles 32:1", "2 Chronicles 33:1", "2 Chronicles 34:1", "2 Chronicles 35:1", "2 Chronicles 36:1", "Ezra 1:1", "Ezra 2:1", "Ezra 3:1", "Ezra 4:1", "Ezra 5:1", "Ezra 6:1", "Ezra 7:1", "Ezra 8:1", "Ezra 9:1", "Ezra 10:1", "Nehemiah 1:1", "Nehemiah 2:1", "Nehemiah 3:1", "Nehemiah 4:1", "Nehemiah 5:1", "Nehemiah 6:1", "Nehemiah 7:1", "Nehemiah 8:1", "Nehemiah 9:1", "Nehemiah 10:1", "Nehemiah 11:1", "Nehemiah 12:1", "Nehemiah 13:1", "Esther 1:1", "Esther 2:1", "Esther 3:1", "Esther 4:1", "Esther 5:1", "Esther 6:1", "Esther 7:1", "Esther 8:1", "Esther 9:1", "Esther 10:1", "Job 1:1", "Job 2:1", "Job 3:1", "Job 4:1", "Job 5:1", "Job 6:1", "Job 7:1", "Job 8:1", "Job 9:1", "Job 10:1", "Job 11:1", "Job 12:1", "Job 13:1", "Job 14:1", "Job 15:1", "Job 16:1", "Job 17:1", "Job 18:1", "Job 19:1", "Job 20:1", "Job 21:1", "Job 22:1", "Job 23:1", "Job 24:1", "Job 25:1", "Job 26:1", "Job 27:1", "Job 28:1", "Job 29:1", "Job 30:1", "Job 31:1", "Job 32:1", "Job 33:1", "Job 34:1", "Job 35:1", "Job 36:1", "Job 37:1", "Job 38:1", "Job 39:1", "Job 40:1", "Job 41:1", "Job 42:1", "Psalms 1:1", "Psalms 2:1", "Psalms 3:1", "Psalms 4:1", "Psalms 5:1", "Psalms 6:1", "Psalms 7:1", "Psalms 8:1", "Psalms 9:1", "Psalms 10:1", "Psalms 11:1", "Psalms 12:1", "Psalms 13:1", "Psalms 14:1", "Psalms 15:1", "Psalms 16:1", "Psalms 17:1", "Psalms 18:1", "Psalms 19:1", "Psalms 20:1", "Psalms 21:1", "Psalms 22:1", "Psalms 23:1", "Psalms 24:1", "Psalms 25:1", "Psalms 26:1", "Psalms 27:1", "Psalms 28:1", "Psalms 29:1", "Psalms 30:1", "Psalms 31:1", "Psalms 32:1", "Psalms 33:1", "Psalms 34:1", "Psalms 35:1", "Psalms 36:1", "Psalms 37:1", "Psalms 38:1", "Psalms 39:1", "Psalms 40:1", "Psalms 41:1", "Psalms 42:1", "Psalms 43:1", "Psalms 44:1", "Psalms 45:1", "Psalms 46:1", "Psalms 47:1", "Psalms 48:1", "Psalms 49:1", "Psalms 50:1", "Psalms 51:1", "Psalms 52:1", "Psalms 53:1", "Psalms 54:1", "Psalms 55:1", "Psalms 56:1", "Psalms 57:1", "Psalms 58:1", "Psalms 59:1", "Psalms 60:1", "Psalms 61:1", "Psalms 62:1", "Psalms 63:1", "Psalms 64:1", "Psalms 65:1", "Psalms 66:1", "Psalms 67:1", "Psalms 68:1", "Psalms 69:1", "Psalms 70:1", "Psalms 71:1", "Psalms 72:1", "Psalms 73:1", "Psalms 74:1", "Psalms 75:1", "Psalms 76:1", "Psalms 77:1", "Psalms 78:1", "Psalms 79:1", "Psalms 80:1", "Psalms 81:1", "Psalms 82:1", "Psalms 83:1", "Psalms 84:1", "Psalms 85:1", "Psalms 86:1", "Psalms 87:1", "Psalms 88:1", "Psalms 89:1", "Psalms 90:1", "Psalms 91:1", "Psalms 92:1", "Psalms 93:1", "Psalms 94:1", "Psalms 95:1", "Psalms 96:1", "Psalms 97:1", "Psalms 98:1", "Psalms 99:1", "Psalms 100:1", "Psalms 101:1", "Psalms 102:1", "Psalms 103:1", "Psalms 104:1", "Psalms 105:1", "Psalms 106:1", "Psalms 107:1", "Psalms 108:1", "Psalms 109:1", "Psalms 110:1", "Psalms 111:1", "Psalms 112:1", "Psalms 113:1", "Psalms 114:1", "Psalms 115:1", "Psalms 116:1", "Psalms 117:1", "Psalms 118:1", "Psalms 119:1", "Psalms 120:1", "Psalms 121:1", "Psalms 122:1", "Psalms 123:1", "Psalms 124:1", "Psalms 125:1", "Psalms 126:1", "Psalms 127:1", "Psalms 128:1", "Psalms 129:1", "Psalms 130:1", "Psalms 131:1", "Psalms 132:1", "Psalms 133:1", "Psalms 134:1", "Psalms 135:1", "Psalms 136:1", "Psalms 137:1", "Psalms 138:1", "Psalms 139:1", "Psalms 140:1", "Psalms 141:1", "Psalms 142:1", "Psalms 143:1", "Psalms 144:1", "Psalms 145:1", "Psalms 146:1", "Psalms 147:1", "Psalms 148:1", "Psalms 149:1", "Psalms 150:1", "Proverbs 1:1", "Proverbs 2:1", "Proverbs 3:1", "Proverbs 4:1", "Proverbs 5:1", "Proverbs 6:1", "Proverbs 7:1", "Proverbs 8:1", "Proverbs 9:1", "Proverbs 10:1", "Proverbs 11:1", "Proverbs 12:1", "Proverbs 13:1", "Proverbs 14:1", "Proverbs 15:1", "Proverbs 16:1", "Proverbs 17:1", "Proverbs 18:1", "Proverbs 19:1", "Proverbs 20:1", "Proverbs 21:1", "Proverbs 22:1", "Proverbs 23:1", "Proverbs 24:1", "Proverbs 25:1", "Proverbs 26:1", "Proverbs 27:1", "Proverbs 28:1", "Proverbs 29:1", "Proverbs 30:1", "Proverbs 31:1", "Ecclesiastes 1:1", "Ecclesiastes 2:1", "Ecclesiastes 3:1", "Ecclesiastes 4:1", "Ecclesiastes 5:1", "Ecclesiastes 6:1", "Ecclesiastes 7:1", "Ecclesiastes 8:1", "Ecclesiastes 9:1", "Ecclesiastes 10:1", "Ecclesiastes 11:1", "Ecclesiastes 12:1", "Song of Solomon 1:1", "Song of Solomon 2:1", "Song of Solomon 3:1", "Song of Solomon 4:1", "Song of Solomon 5:1", "Song of Solomon 6:1", "Song of Solomon 7:1", "Song of Solomon 8:1", "Isaiah 1:1", "Isaiah 2:1", "Isaiah 3:1", "Isaiah 4:1", "Isaiah 5:1", "Isaiah 6:1", "Isaiah 7:1", "Isaiah 8:1", "Isaiah 9:1", "Isaiah 10:1", "Isaiah 11:1", "Isaiah 12:1", "Isaiah 13:1", "Isaiah 14:1", "Isaiah 15:1", "Isaiah 16:1", "Isaiah 17:1", "Isaiah 18:1", "Isaiah 19:1", "Isaiah 20:1", "Isaiah 21:1", "Isaiah 22:1", "Isaiah 23:1", "Isaiah 24:1", "Isaiah 25:1", "Isaiah 26:1", "Isaiah 27:1", "Isaiah 28:1", "Isaiah 29:1", "Isaiah 30:1", "Isaiah 31:1", "Isaiah 32:1", "Isaiah 33:1", "Isaiah 34:1", "Isaiah 35:1", "Isaiah 36:1", "Isaiah 37:1", "Isaiah 38:1", "Isaiah 39:1", "Isaiah 40:1", "Isaiah 41:1", "Isaiah 42:1", "Isaiah 43:1", "Isaiah 44:1", "Isaiah 45:1", "Isaiah 46:1", "Isaiah 47:1", "Isaiah 48:1", "Isaiah 49:1", "Isaiah 50:1", "Isaiah 51:1", "Isaiah 52:1", "Isaiah 53:1", "Isaiah 54:1", "Isaiah 55:1", "Isaiah 56:1", "Isaiah 57:1", "Isaiah 58:1", "Isaiah 59:1", "Isaiah 60:1", "Isaiah 61:1", "Isaiah 62:1", "Isaiah 63:1", "Isaiah 64:1", "Isaiah 65:1", "Isaiah 66:1", "Jeremiah 1:1", "Jeremiah 2:1", "Jeremiah 3:1", "Jeremiah 4:1", "Jeremiah 5:1", "Jeremiah 6:1", "Jeremiah 7:1", "Jeremiah 8:1", "Jeremiah 9:1", "Jeremiah 10:1", "Jeremiah 11:1", "Jeremiah 12:1", "Jeremiah 13:1", "Jeremiah 14:1", "Jeremiah 15:1", "Jeremiah 16:1", "Jeremiah 17:1", "Jeremiah 18:1", "Jeremiah 19:1", "Jeremiah 20:1", "Jeremiah 21:1", "Jeremiah 22:1", "Jeremiah 23:1", "Jeremiah 24:1", "Jeremiah 25:1", "Jeremiah 26:1", "Jeremiah 27:1", "Jeremiah 28:1", "Jeremiah 29:1", "Jeremiah 30:1", "Jeremiah 31:1", "Jeremiah 32:1", "Jeremiah 33:1", "Jeremiah 34:1", "Jeremiah 35:1", "Jeremiah 36:1", "Jeremiah 37:1", "Jeremiah 38:1", "Jeremiah 39:1", "Jeremiah 40:1", "Jeremiah 41:1", "Jeremiah 42:1", "Jeremiah 43:1", "Jeremiah 44:1", "Jeremiah 45:1", "Jeremiah 46:1", "Jeremiah 47:1", "Jeremiah 48:1", "Jeremiah 49:1", "Jeremiah 50:1", "Jeremiah 51:1", "Jeremiah 52:1", "Lamentations 1:1", "Lamentations 2:1", "Lamentations 3:1", "Lamentations 4:1", "Lamentations 5:1", "Ezekiel 1:1", "Ezekiel 2:1", "Ezekiel 3:1", "Ezekiel 4:1", "Ezekiel 5:1", "Ezekiel 6:1", "Ezekiel 7:1", "Ezekiel 8:1", "Ezekiel 9:1", "Ezekiel 10:1", "Ezekiel 11:1", "Ezekiel 12:1", "Ezekiel 13:1", "Ezekiel 14:1", "Ezekiel 15:1", "Ezekiel 16:1", "Ezekiel 17:1", "Ezekiel 18:1", "Ezekiel 19:1", "Ezekiel 20:1", "Ezekiel 21:1", "Ezekiel 22:1", "Ezekiel 23:1", "Ezekiel 24:1", "Ezekiel 25:1", "Ezekiel 26:1", "Ezekiel 27:1", "Ezekiel 28:1", "Ezekiel 29:1", "Ezekiel 30:1", "Ezekiel 31:1", "Ezekiel 32:1", "Ezekiel 33:1", "Ezekiel 34:1", "Ezekiel 35:1", "Ezekiel 36:1", "Ezekiel 37:1", "Ezekiel 38:1", "Ezekiel 39:1", "Ezekiel 40:1", "Ezekiel 41:1", "Ezekiel 42:1", "Ezekiel 43:1", "Ezekiel 44:1", "Ezekiel 45:1", "Ezekiel 46:1", "Ezekiel 47:1", "Ezekiel 48:1", "Daniel 1:1", "Daniel 2:1", "Daniel 3:1", "Daniel 4:1", "Daniel 5:1", "Daniel 6:1", "Daniel 7:1", "Daniel 8:1", "Daniel 9:1", "Daniel 10:1", "Daniel 11:1", "Daniel 12:1", "Hosea 1:1", "Hosea 2:1", "Hosea 3:1", "Hosea 4:1", "Hosea 5:1", "Hosea 6:1", "Hosea 7:1", "Hosea 8:1", "Hosea 9:1", "Hosea 10:1", "Hosea 11:1", "Hosea 12:1", "Hosea 13:1", "Hosea 14:1", "Joel 1:1", "Joel 2:1", "Joel 3:1", "Amos 1:1", "Amos 2:1", "Amos 3:1", "Amos 4:1", "Amos 5:1", "Amos 6:1", "Amos 7:1", "Amos 8:1", "Amos 9:1", "Obadiah 1:1", "Jonah 1:1", "Jonah 2:1", "Jonah 3:1", "Jonah 4:1", "Micah 1:1", "Micah 2:1", "Micah 3:1", "Micah 4:1", "Micah 5:1", "Micah 6:1", "Micah 7:1", "Nahum 1:1", "Nahum 2:1", "Nahum 3:1", "Habakkuk 1:1", "Habakkuk 2:1", "Habakkuk 3:1", "Zephaniah 1:1", "Zephaniah 2:1", "Zephaniah 3:1", "Haggai 1:1", "Haggai 2:1", "Zechariah 1:1", "Zechariah 2:1", "Zechariah 3:1", "Zechariah 4:1", "Zechariah 5:1", "Zechariah 6:1", "Zechariah 7:1", "Zechariah 8:1", "Zechariah 9:1", "Zechariah 10:1", "Zechariah 11:1", "Zechariah 12:1", "Zechariah 13:1", "Zechariah 14:1", "Malachi 1:1", "Malachi 2:1", "Malachi 3:1", "Malachi 4:1", "Matthew 1:1", "Matthew 2:1", "Matthew 3:1", "Matthew 4:1", "Matthew 5:1", "Matthew 6:1", "Matthew 7:1", "Matthew 8:1", "Matthew 9:1", "Matthew 10:1", "Matthew 11:1", "Matthew 12:1", "Matthew 13:1", "Matthew 14:1", "Matthew 15:1", "Matthew 16:1", "Matthew 17:1", "Matthew 18:1", "Matthew 19:1", "Matthew 20:1", "Matthew 21:1", "Matthew 22:1", "Matthew 23:1", "Matthew 24:1", "Matthew 25:1", "Matthew 26:1", "Matthew 27:1", "Matthew 28:1", "Mark 1:1", "Mark 2:1", "Mark 3:1", "Mark 4:1", "Mark 5:1", "Mark 6:1", "Mark 7:1", "Mark 8:1", "Mark 9:1", "Mark 10:1", "Mark 11:1", "Mark 12:1", "Mark 13:1", "Mark 14:1", "Mark 15:1", "Mark 16:1", "Luke 1:1", "Luke 2:1", "Luke 3:1", "Luke 4:1", "Luke 5:1", "Luke 6:1", "Luke 7:1", "Luke 8:1", "Luke 9:1", "Luke 10:1", "Luke 11:1", "Luke 12:1", "Luke 13:1", "Luke 14:1", "Luke 15:1", "Luke 16:1", "Luke 17:1", "Luke 18:1", "Luke 19:1", "Luke 20:1", "Luke 21:1", "Luke 22:1", "Luke 23:1", "Luke 24:1", "John 1:1", "John 2:1", "John 3:1", "John 4:1", "John 5:1", "John 6:1", "John 7:1", "John 8:1", "John 9:1", "John 10:1", "John 11:1", "John 12:1", "John 13:1", "John 14:1", "John 15:1", "John 16:1", "John 17:1", "John 18:1", "John 19:1", "John 20:1", "John 21:1", "Acts 1:1", "Acts 2:1", "Acts 3:1", "Acts 4:1", "Acts 5:1", "Acts 6:1", "Acts 7:1", "Acts 8:1", "Acts 9:1", "Acts 10:1", "Acts 11:1", "Acts 12:1", "Acts 13:1", "Acts 14:1", "Acts 15:1", "Acts 16:1", "Acts 17:1", "Acts 18:1", "Acts 19:1", "Acts 20:1", "Acts 21:1", "Acts 22:1", "Acts 23:1", "Acts 24:1", "Acts 25:1", "Acts 26:1", "Acts 27:1", "Acts 28:1", "Romans 1:1", "Romans 2:1", "Romans 3:1", "Romans 4:1", "Romans 5:1", "Romans 6:1", "Romans 7:1", "Romans 8:1", "Romans 9:1", "Romans 10:1", "Romans 11:1", "Romans 12:1", "Romans 13:1", "Romans 14:1", "Romans 15:1", "Romans 16:1", "1 Corinthians 1:1", "1 Corinthians 2:1", "1 Corinthians 3:1", "1 Corinthians 4:1", "1 Corinthians 5:1", "1 Corinthians 6:1", "1 Corinthians 7:1", "1 Corinthians 8:1", "1 Corinthians 9:1", "1 Corinthians 10:1", "1 Corinthians 11:1", "1 Corinthians 12:1", "1 Corinthians 13:1", "1 Corinthians 14:1", "1 Corinthians 15:1", "1 Corinthians 16:1", "2 Corinthians 1:1", "2 Corinthians 2:1", "2 Corinthians 3:1", "2 Corinthians 4:1", "2 Corinthians 5:1", "2 Corinthians 6:1", "2 Corinthians 7:1", "2 Corinthians 8:1", "2 Corinthians 9:1", "2 Corinthians 10:1", "2 Corinthians 11:1", "2 Corinthians 12:1", "2 Corinthians 13:1", "Galatians 1:1", "Galatians 2:1", "Galatians 3:1", "Galatians 4:1", "Galatians 5:1", "Galatians 6:1", "Ephesians 1:1", "Ephesians 2:1", "Ephesians 3:1", "Ephesians 4:1", "Ephesians 5:1", "Ephesians 6:1", "Philippians 1:1", "Philippians 2:1", "Philippians 3:1", "Philippians 4:1", "Colossians 1:1", "Colossians 2:1", "Colossians 3:1", "Colossians 4:1", "1 Thessalonians 1:1", "1 Thessalonians 2:1", "1 Thessalonians 3:1", "1 Thessalonians 4:1", "1 Thessalonians 5:1", "2 Thessalonians 1:1", "2 Thessalonians 2:1", "2 Thessalonians 3:1", "1 Timothy 1:1", "1 Timothy 2:1", "1 Timothy 3:1", "1 Timothy 4:1", "1 Timothy 5:1", "1 Timothy 6:1", "2 Timothy 1:1", "2 Timothy 2:1", "2 Timothy 3:1", "2 Timothy 4:1", "Titus 1:1", "Titus 2:1", "Titus 3:1", "Philemon 1:1", "Hebrews 1:1", "Hebrews 2:1", "Hebrews 3:1", "Hebrews 4:1", "Hebrews 5:1", "Hebrews 6:1", "Hebrews 7:1", "Hebrews 8:1", "Hebrews 9:1", "Hebrews 10:1", "Hebrews 11:1", "Hebrews 12:1", "Hebrews 13:1", "James 1:1", "James 2:1", "James 3:1", "James 4:1", "James 5:1", "1 Peter 1:1", "1 Peter 2:1", "1 Peter 3:1", "1 Peter 4:1", "1 Peter 5:1", "2 Peter 1:1", "2 Peter 2:1", "2 Peter 3:1", "1 John 1:1", "1 John 2:1", "1 John 3:1", "1 John 4:1", "1 John 5:1", "2 John 1:1", "3 John 1:1", "Jude 1:1", "Revelation 1:1", "Revelation 2:1", "Revelation 3:1", "Revelation 4:1", "Revelation 5:1", "Revelation 6:1", "Revelation 7:1", "Revelation 8:1", "Revelation 9:1", "Revelation 10:1", "Revelation 11:1", "Revelation 12:1", "Revelation 13:1", "Revelation 14:1", "Revelation 15:1", "Revelation 16:1", "Revelation 17:1", "Revelation 18:1", "Revelation 19:1", "Revelation 20:1", "Revelation 21:1", "Revelation 22:1"];
+
+  const STORE_KEY = "bibleVerseDisplay.settings.v27";
+  const OLD_STORE_KEY = "bibleVerseDisplay.settings.v26";
+
+  // Book ID -> Name fallback (fixes synodal returning book:null)
+  const BOOK_ID_TO_NAME = {
+    GEN:"Genesis", EXO:"Exodus", LEV:"Leviticus", NUM:"Numbers", DEU:"Deuteronomy",
+    JOS:"Joshua", JDG:"Judges", RUT:"Ruth", "1SA":"1 Samuel", "2SA":"2 Samuel",
+    "1KI":"1 Kings", "2KI":"2 Kings", "1CH":"1 Chronicles", "2CH":"2 Chronicles",
+    EZR:"Ezra", NEH:"Nehemiah", EST:"Esther", JOB:"Job", PSA:"Psalms", PRO:"Proverbs",
+    ECC:"Ecclesiastes", SNG:"Song of Solomon", ISA:"Isaiah", JER:"Jeremiah", LAM:"Lamentations",
+    EZK:"Ezekiel", DAN:"Daniel", HOS:"Hosea", JOL:"Joel", AMO:"Amos", OBA:"Obadiah",
+    JON:"Jonah", MIC:"Micah", NAM:"Nahum", HAB:"Habakkuk", ZEP:"Zephaniah", HAG:"Haggai",
+    ZEC:"Zechariah", MAL:"Malachi",
+    MAT:"Matthew", MRK:"Mark", LUK:"Luke", JHN:"John", ACT:"Acts", ROM:"Romans",
+    "1CO":"1 Corinthians", "2CO":"2 Corinthians", GAL:"Galatians", EPH:"Ephesians", PHP:"Philippians",
+    COL:"Colossians", "1TH":"1 Thessalonians", "2TH":"2 Thessalonians", "1TI":"1 Timothy", "2TI":"2 Timothy",
+    TIT:"Titus", PHM:"Philemon", HEB:"Hebrews", JAS:"James", "1PE":"1 Peter", "2PE":"2 Peter",
+    "1JN":"1 John", "2JN":"2 John", "3JN":"3 John", JUD:"Jude", REV:"Revelation"
+  };
+  const BOOK_ID_TO_NAME_RU = {
+    GEN:"Бытие", EXO:"Исход", LEV:"Левит", NUM:"Числа", DEU:"Второзаконие",
+    JOS:"Иисус Навин", JDG:"Судьи", RUT:"Руфь",
+    "1SA":"1 Царств", "2SA":"2 Царств", "1KI":"3 Царств", "2KI":"4 Царств",
+    "1CH":"1 Паралипоменон", "2CH":"2 Паралипоменон",
+    EZR:"Ездра", NEH:"Неемия", EST:"Есфирь", JOB:"Иов",
+    PSA:"Псалтирь", PRO:"Притчи", ECC:"Екклесиаст", SNG:"Песнь Песней",
+    ISA:"Исаия", JER:"Иеремия", LAM:"Плач Иеремии", EZK:"Иезекииль", DAN:"Даниил",
+    HOS:"Осия", JOL:"Иоиль", AMO:"Амос", OBA:"Авдий", JON:"Иона", MIC:"Михей",
+    NAM:"Наум", HAB:"Аввакум", ZEP:"Софония", HAG:"Аггей", ZEC:"Захария", MAL:"Малахия",
+    MAT:"От Матфея", MRK:"От Марка", LUK:"От Луки", JHN:"От Иоанна",
+    ACT:"Деяния", ROM:"Римлянам",
+    "1CO":"1 Коринфянам", "2CO":"2 Коринфянам",
+    GAL:"Галатам", EPH:"Ефесянам", PHP:"Филиппийцам", COL:"Колоссянам",
+    "1TH":"1 Фессалоникийцам", "2TH":"2 Фессалоникийцам",
+    "1TI":"1 Тимофею", "2TI":"2 Тимофею",
+    TIT:"Титу", PHM:"Филимону", HEB:"Евреям", JAS:"Иакова",
+    "1PE":"1 Петра", "2PE":"2 Петра",
+    "1JN":"1 Иоанна", "2JN":"2 Иоанна", "3JN":"3 Иоанна",
+    JUD:"Иуды", REV:"Откровение"
+  };
+
+  function isRussianTranslationId(tid){
+    const t = String(tid || "").toLowerCase();
+    return t === "synodal" || t.startsWith("ru") || t.includes("russian");
+  }
+
+  function bookNameFor(bookId, fallbackEnglish){
+    if(isRussianTranslationId(settings.translationId)){
+      return BOOK_ID_TO_NAME_RU[bookId] || fallbackEnglish || bookId || "-";
+    }
+    return BOOK_ID_TO_NAME[bookId] || fallbackEnglish || bookId || "-";
+  }
+
+
+  // Curated translations (shown immediately; then we try to filter by /data if available)
+  const REQUESTED_TRANSLATIONS = [
+    { id: "kjv", label: "King James Version (KJV)" },
+    { id: "web", label: "World English Bible (WEB)" },
+    { id: "asv", label: "American Standard Version (ASV)" },
+    { id: "bbe", label: "Bible in Basic English (BBE)" },
+    { id: "darby", label: "Darby Bible" },
+    { id: "dra", label: "Douay-Rheims" },
+    { id: "ylt", label: "Young's Literal (NT only)" },
+    { id: "oeb-us", label: "Open English Bible (US)" },
+    { id: "oeb-cw", label: "Open English Bible (Commonwealth)" },
+    { id: "webbe", label: "WEB British Edition" },
+    { id: "synodal", label: "Russian Synodal Translation (synodal)" }
+  ];
+
+  const FONT_OPTIONS = [
+    { group: "Classic", label: "Georgia", css: "Georgia, serif" },
+    { group: "Classic", label: "Times New Roman", css: "'Times New Roman', Times, serif" },
+    { group: "Classic", label: "Palatino", css: "'Palatino Linotype','Book Antiqua',Palatino,serif" },
+    { group: "Classic", label: "Garamond", css: "Garamond, 'EB Garamond', serif" },
+    { group: "Classic", label: "Bookman", css: "'Bookman Old Style', Bookman, serif" },
+
+    { group: "Script", label: "Pacifico", css: "Pacifico, 'Comic Sans MS', cursive" },
+    { group: "Script", label: "Dancing Script", css: "'Dancing Script', cursive" },
+    { group: "Script", label: "Great Vibes", css: "'Great Vibes', cursive" },
+    { group: "Script", label: "Caveat", css: "Caveat, cursive" },
+    { group: "Script", label: "Allura", css: "Allura, cursive" },
+
+    { group: "Modern", label: "Inter", css: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" },
+    { group: "Modern", label: "Roboto", css: "Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" },
+    { group: "Modern", label: "Montserrat", css: "Montserrat, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" },
+    { group: "Modern", label: "Poppins", css: "Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" },
+    { group: "Modern", label: "Open Sans", css: "'Open Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" }
+  ];
+
+  const BACKGROUND_IMAGES = [
+    "1.PNG",
+    "2.PNG",
+    "3.PNG",
+    "PNG image.png",
+    "PNG image 2.png",
+    "PNG image 3.png",
+    "PNG image 4.png",
+    "PNG image 5.png",
+    "IMG_3078.AVIF",
+    "IMG_3079.AVIF",
+    "IMG_3080.AVIF",
+    "IMG_3081.AVIF",
+    "IMG_3082.JPG",
+    "IMG_3083.JPG",
+    "IMG_3084.JPG",
+    "IMG_3085.JPG",
+    "IMG_3086.JPG",
+    "IMG_3087.JPG",
+    "IMG_3088.JPG",
+    "IMG_3089.JPG",
+  ];
+
+  // If your WebView has trouble with .AVIF, remove the AVIF entries above or convert them to .JPG/.PNG.
+
+
+  const MUSIC_TRACKS = [
+    "untitled.mp3",
+    "untitled 2.mp3",
+    "untitled 3.mp3",
+    "tim-janis-inspired.mp3",
+    "tim-janis-inspired 2.mp3",
+    "endless-piano.mp3",
+    "endless-piano 2.mp3",
+    "relax-a-bit.mp3",
+    "relax-a-bit 2.mp3",
+    "relax-a-bit 3.mp3",
+  ];
+
+
+  const els = {
+    statusText: document.getElementById("statusText"),
+    refOut: document.getElementById("refOut"),
+    verseOut: document.getElementById("verseOut"),
+    metaOut: document.getElementById("metaOut"),
+    btnPrev: document.getElementById("btnPrev"),
+    btnNext: document.getElementById("btnNext"),
+    btnSettings: document.getElementById("btnSettings"),
+    btnMusicToggle: document.getElementById("btnMusicToggle"),
+    tapArea: document.getElementById("tapArea"),
+    stage: document.getElementById("stage"),
+
+    panelWrap: document.getElementById("panelWrap"),
+    panelScroll: document.getElementById("panelScroll"),
+    btnPageUp: document.getElementById("btnPageUp"),
+    btnPageDown: document.getElementById("btnPageDown"),
+    btnClose: document.getElementById("btnClose"),
+    btnReset: document.getElementById("btnReset"),
+
+    translationSelect: document.getElementById("translationSelect"),
+    verseSource: document.getElementById("verseSource"),
+    randomScope: document.getElementById("randomScope"),
+
+    cycleMode: document.getElementById("cycleMode"),
+    cycleT1: document.getElementById("cycleT1"),
+    cycleT2: document.getElementById("cycleT2"),
+    cycleT3: document.getElementById("cycleT3"),
+    transBlankSec: document.getElementById("transBlankSec"),
+    verseGapSec: document.getElementById("verseGapSec"),
+    uiScale: document.getElementById("uiScale"),
+    verseSize: document.getElementById("verseSize"),
+    refSize: document.getElementById("refSize"),
+    verseFont: document.getElementById("verseFont"),
+    refFont: document.getElementById("refFont"),
+    menuOpacity: document.getElementById("menuOpacity"),
+
+    fullScreenMode: document.getElementById("fullScreenMode"),
+
+    bgShadeStrength: document.getElementById("bgShadeStrength"),
+    textColor: document.getElementById("textColor"),
+    textShadowOn: document.getElementById("textShadowOn"),
+    textShadowStrength: document.getElementById("textShadowStrength"),
+    textStrokeWidth: document.getElementById("textStrokeWidth"),
+    textStrokeColor: document.getElementById("textStrokeColor"),
+
+    verseOnSec: document.getElementById("verseOnSec"),
+    verseBlankSec: document.getElementById("verseBlankSec"),
+
+    bgStaySec: document.getElementById("bgStaySec"),
+    bgFadeSec: document.getElementById("bgFadeSec"),
+    bgZoom: document.getElementById("bgZoom"),
+    btnNewBg: document.getElementById("btnNewBg"),
+
+    bgA: document.getElementById("bgA"),
+    bgB: document.getElementById("bgB"),
+      musicEnabled: document.getElementById("musicEnabled"),
+    musicVolume: document.getElementById("musicVolume"),
+    musicShuffle: document.getElementById("musicShuffle"),
+    musicCrossfadeSec: document.getElementById("musicCrossfadeSec"),
+};
+
+  const defaultSettings = {
+    translationId: "kjv",
+    verseSource: "curated",
+    randomScope: "NT",
+
+    cycleMode: 0,
+    cycleT1: "kjv",
+    cycleT2: "synodal",
+    cycleT3: "web",
+    transBlankSec: 1,
+    verseGapSec: 30,
+
+    uiScale: 1.00,
+    verseSize: 48,
+    refSize: 22,
+    verseFontCss: FONT_OPTIONS[10].css,
+    refFontCss: FONT_OPTIONS[10].css,
+
+    menuOpacity: 0.86,
+
+    fullScreenMode: 0,
+
+    bgShadeStrength: 0.00,
+
+    textColor: "#ffffff",
+    textShadowOn: 1,
+    textShadowStrength: 22,
+    textStrokeWidth: 0,
+    textStrokeColor: "#000000",
+
+    // Standard timings (so it never opens blank)
+    verseOnSec: 18,
+    verseBlankSec: 4,
+
+    bgIndex: 0,
+    bgStaySec: 27,
+    bgFadeSec: 2.0,
+    bgZoom: 1.12,
+
+    // Music (local MP3 files in same folder)
+    musicEnabled: 0,
+    musicVolume: 0.65,
+    musicShuffle: 1,
+    musicCrossfadeSec: 2.0,
+    musicSeed: 0,
+    musicIndex: 0,
+  };
+
+  let settings = loadSettings();
+
+  // Verse history
+  let history = [];
+  let historyIndex = -1;
+
+  // Background state
+  let bgOnA = true;
+  let bgLoopTimer = null;
+  let verseLoopTimer = null;
+  let verseLoopRunning = false;
+
+  // Prevent stale in-flight verse fetches from updating UI after a newer request
+  let verseRequestId = 0;
+  function bumpVerseRequest(){ verseRequestId += 1; return verseRequestId; }
+  function isCurrentVerseRequest(id){ return id === verseRequestId; }
+  function secToMsSafe(value, minSec){
+    const n = Number(value);
+    if(!isFinite(n)) return Math.max(0, Number(minSec||0)) * 1000;
+    return Math.max(Number(minSec||0), n) * 1000;
+  }
+
+  
+  function updateMusicToggleButton(){
+    if(!els.btnMusicToggle) return;
+    const on = !!settings.musicEnabled;
+    els.btnMusicToggle.textContent = on ? "Music On" : "Music Off";
+  }
+
+function setStatus(text){ els.statusText.textContent = text; }
+  function saveSettingsNow(){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(settings)); }catch(e){ /* ignore storage failures */ }
+  }
+  let saveTO = null;
+  function saveSettings(){
+    // Debounced to avoid localStorage write spam (sliders fire many input events)
+    try{ clearTimeout(saveTO); }catch(e){}
+    saveTO = setTimeout(saveSettingsNow, 150);
+  }
+  function loadSettings(){
+    try{
+      const raw = localStorage.getItem(STORE_KEY) || localStorage.getItem(OLD_STORE_KEY);
+      if(!raw) return { ...defaultSettings };
+      const parsed = JSON.parse(raw);
+      // Merge with defaults so missing fields never break UI
+      return { ...defaultSettings, ...parsed };
+    }catch(e){
+      return { ...defaultSettings };
+    }
+  }
+
+  function applySettingsToUI(){
+    document.documentElement.style.setProperty("--ui-scale", String(settings.uiScale));
+    document.documentElement.style.setProperty("--verse-size", settings.verseSize + "px");
+    document.documentElement.style.setProperty("--ref-size", settings.refSize + "px");
+    document.documentElement.style.setProperty("--verse-font", settings.verseFontCss);
+    document.documentElement.style.setProperty("--ref-font", settings.refFontCss);
+    document.documentElement.style.setProperty("--menu-opacity", String(settings.menuOpacity));
+
+    document.documentElement.style.setProperty("--bg-shade-strength", String(settings.bgShadeStrength));
+    document.documentElement.style.setProperty("--text-color", settings.textColor);
+    const shadowStrength = settings.textShadowOn ? (Number(settings.textShadowStrength)||0) : 0;
+    document.documentElement.style.setProperty("--text-shadow-strength", shadowStrength + "px");
+    document.documentElement.style.setProperty("--text-stroke-width", (Number(settings.textStrokeWidth)||0) + "px");
+    document.documentElement.style.setProperty("--text-stroke-color", settings.textStrokeColor);
+
+    // Inputs (always set so it doesn't open blank)
+    els.randomScope.value = settings.randomScope;
+
+    if(els.cycleMode) els.cycleMode.value = String(settings.cycleMode);
+    if(els.cycleT1) els.cycleT1.value = settings.cycleT1;
+    if(els.cycleT2) els.cycleT2.value = settings.cycleT2;
+    if(els.cycleT3) els.cycleT3.value = settings.cycleT3;
+    if(els.transBlankSec) els.transBlankSec.value = settings.transBlankSec;
+    if(els.verseGapSec) els.verseGapSec.value = settings.verseGapSec;
+    els.uiScale.value = settings.uiScale;
+    els.verseSize.value = settings.verseSize;
+    els.refSize.value = settings.refSize;
+    els.menuOpacity.value = settings.menuOpacity;
+
+    els.fullScreenMode.value = String(settings.fullScreenMode);
+    applyChromeVisibility(true);
+
+    els.bgShadeStrength.value = settings.bgShadeStrength;
+    els.textColor.value = settings.textColor;
+    els.textShadowOn.value = String(settings.textShadowOn);
+    els.textShadowStrength.value = settings.textShadowStrength;
+    els.textStrokeWidth.value = settings.textStrokeWidth;
+    els.textStrokeColor.value = settings.textStrokeColor;
+
+    els.verseOnSec.value = settings.verseOnSec;
+    els.verseBlankSec.value = settings.verseGapSec; // legacy control now shows gap between NEW verses
+
+
+    els.bgStaySec.value = settings.bgStaySec;
+    els.bgFadeSec.value = settings.bgFadeSec;
+    els.bgZoom.value = settings.bgZoom;
+
+    
+    els.musicEnabled.value = String(settings.musicEnabled);
+    els.musicVolume.value = settings.musicVolume;
+    els.musicShuffle.value = String(settings.musicShuffle);
+    els.musicCrossfadeSec.value = settings.musicCrossfadeSec;
+
+    updateMusicToggleButton();
+applyBgFadeTiming();
+  }
+
+  function resetSettings(){
+    settings = { ...defaultSettings };
+    saveSettings();
+    populateFontSelects();
+    populateTranslationSelectImmediate();
+    applySettingsToUI();
+  rebuildMusicQueue(false);
+  applyMusicVolumes();
+    restartLoops(true);
+  }
+
+  function populateFontSelects(){
+    const build = (sel, currentCss) => {
+      sel.innerHTML = "";
+      for(const g of ["Classic","Script","Modern"]){
+        const og = document.createElement("optgroup");
+        og.label = g;
+        for(const f of FONT_OPTIONS.filter(x => x.group === g)){
+          const opt = document.createElement("option");
+          opt.value = f.css;
+          opt.textContent = f.label;
+          if(f.css === currentCss) opt.selected = true;
+          og.appendChild(opt);
+        }
+        sel.appendChild(og);
+      }
+    };
+    build(els.verseFont, settings.verseFontCss);
+    build(els.refFont, settings.refFontCss);
+  }
+
+  // Always populate translation select with fallback immediately (so user can select even if API is blocked)
+  function populateTranslationSelectImmediate(){
+    const fillMain = (sel) => {
+      if(!sel) return;
+      sel.innerHTML = "";
+      for(const t of REQUESTED_TRANSLATIONS){
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = t.label;
+        sel.appendChild(opt);
+      }
+    };
+
+    const fillCycle = (sel, allowNone) => {
+      if(!sel) return;
+      sel.innerHTML = "";
+      if(allowNone){
+        const opt0 = document.createElement("option");
+        opt0.value = "none";
+        opt0.textContent = "None (skip)";
+        sel.appendChild(opt0);
+      }
+      for(const t of REQUESTED_TRANSLATIONS){
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = t.label;
+        sel.appendChild(opt);
+      }
+    };
+
+    fillMain(els.translationSelect);
+    fillCycle(els.cycleT1, false);
+    fillCycle(els.cycleT2, true);
+    fillCycle(els.cycleT3, true);
+
+    const ensure = (val, sel, fallback) => {
+      const v = String(val || "").toLowerCase();
+      const ok = sel && [...sel.options].some(o => o.value === v);
+      return ok ? v : fallback;
+    };
+
+    settings.translationId = ensure(settings.translationId, els.translationSelect, "kjv");
+    if(els.translationSelect) els.translationSelect.value = settings.translationId;
+    if(els.verseSource) els.verseSource.value = settings.verseSource;
+
+    settings.cycleT1 = ensure(settings.cycleT1, els.cycleT1, settings.translationId || "kjv");
+    settings.cycleT2 = ensure(settings.cycleT2, els.cycleT2, "none");
+    settings.cycleT3 = ensure(settings.cycleT3, els.cycleT3, "none");
+
+    if(els.cycleT1) els.cycleT1.value = settings.cycleT1;
+    if(els.cycleT2) els.cycleT2.value = settings.cycleT2;
+    if(els.cycleT3) els.cycleT3.value = settings.cycleT3;
+  }
+
+  async function refineTranslationListFromApi(){
+    try{
+      setStatus("loading translations");
+      const r = await fetch(API_BASE + "/data", { cache: "no-store" });
+      if(!r.ok) throw new Error("translations " + r.status);
+      const data = await r.json();
+      const list = (data && Array.isArray(data.translations)) ? data.translations : [];
+      const availableIds = new Set(list.map(x => (x.identifier||"").toLowerCase()).filter(Boolean));
+      const filtered = REQUESTED_TRANSLATIONS.filter(t => availableIds.has(t.id.toLowerCase()));
+      if(filtered.length === 0){ setStatus("ready"); return; }
+
+      els.translationSelect.innerHTML = "";
+      for(const t of filtered){
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = t.label;
+        els.translationSelect.appendChild(opt);
+      }
+      const current = (settings.translationId || "kjv").toLowerCase();
+      const exists = [...els.translationSelect.options].some(o => o.value === current);
+      settings.translationId = exists ? current : els.translationSelect.options[0].value;
+      els.translationSelect.value = settings.translationId;
+    if(els.verseSource) els.verseSource.value = settings.verseSource;
+      saveSettings();
+      setStatus("ready");
+    }catch(e){
+      // Keep the immediate fallback list
+      setStatus("ready");
+    }
+  }
+
+  function scopeToEndpointPart(scope){
+    if(scope === "NT") return "/NT";
+    if(scope === "OT") return "/OT";
+    if(scope === "GOS") return "/MAT,MRK,LUK,JHN";
+    if(scope === "PSA") return "/PSA";
+    if(scope === "PRO") return "/PRO";
+    return "";
+  }
+
+  async function fetchRandomVerse(){
+    const t = settings.translationId;
+    const scopePart = scopeToEndpointPart(settings.randomScope);
+
+    // Some translations don't support scoped random endpoints (synodal commonly).
+    // Try scoped first, then fall back to unscoped.
+    const urls = [
+      `${API_BASE}/data/${encodeURIComponent(t)}/random${scopePart}`,
+      `${API_BASE}/data/${encodeURIComponent(t)}/random`
+    ];
+
+    abortVerseFetch();
+    verseFetchCtrl = new AbortController();
+
+    let lastErr = null;
+    for(const url of urls){
+      try{
+        return await fetchJsonWithTimeout(url, { timeoutMs: 12000, controller: verseFetchCtrl });
+      }catch(e){
+        lastErr = e;
+        // If the current request was aborted (e.g., user tapped rapidly), stop early.
+        if(e && (e.name === "AbortError" || /aborted/i.test(String(e)))) break;
+      }
+    }
+    throw lastErr || new Error("Verse request failed");
+  }
+
+  async function fetchVerseByRef(reference, translationId){
+    const ref = String(reference || "").trim();
+    if(!ref) throw new Error("Empty reference");
+    const url = `${API_BASE}/${encodeURIComponent(ref)}?translation=${encodeURIComponent(translationId)}`;
+
+    abortVerseFetch();
+    verseFetchCtrl = new AbortController();
+
+    return await fetchJsonWithTimeout(url, { timeoutMs: 12000, controller: verseFetchCtrl });
+  }
+
+  // Cache for chapter fetches (translation|book|chapter -> JSON)
+  const chapterCache = new Map();
+  const CHAPTER_CACHE_MAX = 50;
+  function chapterCacheSet(key, value){
+    chapterCache.set(key, value);
+    if(chapterCache.size > CHAPTER_CACHE_MAX){
+      const firstKey = chapterCache.keys().next().value;
+      chapterCache.delete(firstKey);
+    }
+  }
+
+  async function fetchChapter(translationId, bookId, chapter){
+    const key = `${translationId}|${bookId}|${chapter}`;
+    if(chapterCache.has(key)) return chapterCache.get(key);
+    const url = `${API_BASE}/data/${encodeURIComponent(translationId)}/${encodeURIComponent(bookId)}/${encodeURIComponent(chapter)}`;
+    const r = await fetch(url, { cache: "no-store" });
+    if(!r.ok) throw new Error(`Chapter request failed (${r.status})`);
+    const data = await r.json();
+    chapterCacheSet(key, data);
+    return data;
+  }
+
+  async function fetchVerseByLocation(translationId, bookId, chapter, verse){
+    // Prefer the simple reference endpoint (often more reliable across hosts/CORS),
+    // then fall back to the /data chapter endpoint.
+    const bookEn = BOOK_ID_TO_NAME[bookId] || bookId || "";
+    const ref = `${bookEn} ${chapter}:${verse}`.trim();
+
+    // 1) Reference endpoint: /<ref>?translation=<id>
+    try{
+      const url = `${API_BASE}/${encodeURIComponent(ref)}?translation=${encodeURIComponent(translationId)}`;
+      const r = await fetch(url, { cache: "no-store" });
+      if(r.ok){
+        const data = await r.json();
+        // Normalize to include a verses array when possible
+        return data;
+      }
+    }catch(e){
+      // ignore and fall back
+    }
+
+    // 2) Fallback: /data/{translation}/{BOOK_ID}/{CHAPTER} then pick verse
+    const data = await fetchChapter(translationId, bookId, chapter);
+    const verses = Array.isArray(data.verses) ? data.verses : [];
+    const v = verses.find(x => Number(x.verse) === Number(verse));
+    if(!v) throw new Error("Verse not found in chapter");
+    return {
+      translation: data.translation,
+      translation_id: data.translation_id,
+      translation_name: data.translation_name,
+      verses: [v],
+      text: v.text
+    };
+  }
+
+  function formatVersePayload(data){
+    const rv = data.random_verse || data.randomVerse || null;
+
+    const bookName = rv
+      ? bookNameFor(rv.book_id || "", rv.book || "")
+      : (data?.book_name || data?.book || "-");
+
+    const reference =
+      data.reference ||
+      data.verse?.reference ||
+      (rv ? `${bookName} ${rv.chapter}:${rv.verse}` : "") ||
+      (data?.verses?.[0] && (data.verses[0].book_name + " " + data.verses[0].chapter + ":" + data.verses[0].verse)) ||
+      "-";
+
+    const text =
+      data.text ||
+      data.verse?.text ||
+      (rv ? rv.text : "") ||
+      (data.verses ? data.verses.map(v => v.text).join(" ").trim() : "") ||
+      "";
+
+    const translationId =
+      data.translation_id ||
+      data.translationId ||
+      data.translation?.id ||
+      data.translation?.identifier ||
+      settings.translationId;
+
+    const translationName =
+      data.translation_name ||
+      data.translationName ||
+      data.translation?.name ||
+      (data.translation && data.translation.identifier ? data.translation.identifier.toUpperCase() : "") ||
+      translationId;
+
+    let loc = null;
+    if(rv && rv.book_id && rv.chapter && rv.verse){
+      loc = { book_id: rv.book_id, chapter: Number(rv.chapter), verse: Number(rv.verse) };
+    }else if(data?.verses?.[0]){
+      loc = { book_id: data.verses[0].book_id, chapter: Number(data.verses[0].chapter), verse: Number(data.verses[0].verse) };
+    }
+    return { reference, text: String(text || "").trim(), translationId, translationName, loc };
+  }
+
+  function setVerseDisplay(v){
+    els.refOut.textContent = v.reference || "-";
+    els.verseOut.textContent = v.text || "(No text returned)";
+    els.metaOut.textContent = `${(v.translationName || "").trim()} (${(v.translationId || "").trim()})`;
+  }
+
+  function pushHistory(v){
+    if(historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
+    history.push(v);
+    historyIndex = history.length - 1;
+  }
+
+  function prevVerse(){
+    if(historyIndex > 0){
+      historyIndex -= 1;
+      setVerseDisplay(history[historyIndex]);
+    }
+  }
+
+  function forwardVerseFromHistory(){
+    if(historyIndex < history.length - 1){
+      historyIndex += 1;
+      setVerseDisplay(history[historyIndex]);
+      return true;
+    }
+    return false;
+  }
+
+  async function nextVerse(){
+    const rid = bumpVerseRequest();
+    try{
+      setStatus("loading verse");
+      let v;
+      if(settings.verseSource === 'curated'){
+        const ref = CURATED_REFS[Math.floor(Math.random() * CURATED_REFS.length)];
+        const data = await fetchVerseByRef(ref, settings.translationId);
+        if(!isCurrentVerseRequest(rid)) return;
+        v = formatVersePayload(data);
+        v.reference = ref;
+      }else{
+        const data = await fetchRandomVerse();
+        if(!isCurrentVerseRequest(rid)) return;
+        v = formatVersePayload(data);
+      }
+      pushHistory(v);
+      setVerseDisplay(v);
+      setStatus("ready");
+    }catch(e){
+      if(!isCurrentVerseRequest(rid)) return; // stale
+      setStatus("error");
+      els.refOut.textContent = "-";
+      els.verseOut.textContent = "Could not load verse.";
+      els.metaOut.textContent = String(e.message || e) + " - Check network/CORS on your host.";
+    }
+  }
+
+  function setVerseVisible(isVisible){
+    els.stage.style.opacity = isVisible ? "1" : "0";
+  }
+
+  function stopVerseLoop(){
+    // Invalidate any in-flight verse fetch so it can't update UI later
+    bumpVerseRequest();
+    abortVerseFetch();
+    verseLoopRunning = false;
+    if(verseLoopTimer){ clearTimeout(verseLoopTimer); verseLoopTimer = null; }
+  }
+
+  function startVerseLoop(){
+    stopVerseLoop();
+    verseLoopRunning = true;
+
+    const TEXT_FADE_MS = 600;
+
+    // Cycle state
+    let cycleStep = 0;
+    let currentLoc = null;
+    let currentRef = null;
+
+    const wait = (ms) => new Promise(res => setTimeout(res, ms));
+
+    const getCycleList = () => {
+      if(!settings.cycleMode) return [settings.translationId];
+      const a = [settings.cycleT1, settings.cycleT2, settings.cycleT3]
+        .map(x => String(x||"").toLowerCase())
+        .filter(x => x && x !== 'none');
+      const out = [];
+      for(const t of a) if(!out.includes(t)) out.push(t);
+      return out.length ? out : [settings.translationId];
+    };
+
+    const fetchNewRandomForCycle = async (cycleList) => {
+      // Random verse fetched in Translation 1
+      const originalTid = settings.translationId;
+      settings.translationId = cycleList[0];
+      try{
+        const data = await fetchRandomVerse();
+        const v = formatVersePayload(data);
+        currentLoc = v.loc || null;
+        return v;
+      }finally{
+        settings.translationId = originalTid;
+      }
+    };
+
+    const pickCuratedRef = () => {
+      // Random pick from curated list
+      const idx = Math.floor(Math.random() * CURATED_REFS.length);
+      return CURATED_REFS[idx];
+    };
+
+    const fetchNewCuratedForCycle = async (cycleList) => {
+      const originalTid = settings.translationId;
+      settings.translationId = cycleList[0];
+      try{
+        currentRef = pickCuratedRef();
+        const data = await fetchVerseByRef(currentRef, cycleList[0]);
+        const v = formatVersePayload(data);
+        // Force displayed reference to the curated reference (range-friendly)
+        v.reference = currentRef;
+        return v;
+      }finally{
+        settings.translationId = originalTid;
+      }
+    };
+
+    const fetchSameRefInTranslation = async (translationId) => {
+      if(!currentRef) throw new Error("No current reference");
+      const data = await fetchVerseByRef(currentRef, translationId);
+      const v = formatVersePayload(data);
+      v.reference = currentRef;
+      return v;
+    };
+
+
+    const fetchSameVerseInTranslation = async (tid) => {
+      if(!currentLoc) throw new Error("Missing verse location");
+      const data = await fetchVerseByLocation(tid, currentLoc.book_id, currentLoc.chapter, currentLoc.verse);
+      const v = formatVersePayload(data);
+      v.reference = `${bookNameFor(currentLoc.book_id, "")} ${currentLoc.chapter}:${currentLoc.verse}`;
+      return v;
+    };
+
+    const run = async () => {
+      if(!verseLoopRunning) return;
+
+      const cycleList = getCycleList();
+
+      // Ensure we have initial content
+      if(history.length === 0){
+        try{
+          setStatus("loading verse");
+          let v0;
+          if(settings.cycleMode){
+            v0 = (settings.verseSource === 'curated') ? await fetchNewCuratedForCycle(cycleList) : await fetchNewRandomForCycle(cycleList);
+          }else if(settings.verseSource === 'curated'){
+            currentRef = pickCuratedRef();
+            const data = await fetchVerseByRef(currentRef, settings.translationId);
+            v0 = formatVersePayload(data);
+            v0.reference = currentRef;
+          }else{
+            v0 = formatVersePayload(await fetchRandomVerse());
+          }
+          pushHistory(v0);
+          setVerseDisplay(v0);
+          currentLoc = v0.loc || currentLoc;
+          setStatus("ready");
+        }catch(e){
+          setStatus("error");
+          els.refOut.textContent = "-";
+          els.verseOut.textContent = "Could not load verse.";
+          els.metaOut.textContent = String(e.message || e) + " - Check network/CORS on your host.";
+        }
+      }
+
+      setVerseVisible(true);
+
+      const onMs = Math.max(1000, Number(settings.verseOnSec || 10) * 1000);
+
+      verseLoopTimer = setTimeout(async () => {
+        if(!verseLoopRunning) return;
+        const rid = bumpVerseRequest(); // token for this loop tick
+
+        // Fade OUT current verse first
+        setVerseVisible(false);
+        await wait(TEXT_FADE_MS);
+
+        let blankMs = 0;
+
+        try{
+          setStatus("loading verse");
+
+          if(settings.cycleMode){
+            cycleStep = (cycleStep + 1) % cycleList.length;
+
+            if(cycleStep === 0){
+              // Wrapped -> NEW random verse
+              const vNew = (settings.verseSource === 'curated') ? await fetchNewCuratedForCycle(cycleList) : await fetchNewRandomForCycle(cycleList);
+              if(!isCurrentVerseRequest(rid) || !verseLoopRunning) return; // stale
+              pushHistory(vNew);
+              setVerseDisplay(vNew);
+              currentLoc = vNew.loc || currentLoc;
+              blankMs = secToMsSafe(settings.verseGapSec || 0, 0);
+            }else{
+              const tid = cycleList[cycleStep];
+              const vSame = (settings.verseSource === 'curated') ? await fetchSameRefInTranslation(tid) : await fetchSameVerseInTranslation(tid);
+              if(!isCurrentVerseRequest(rid) || !verseLoopRunning) return; // stale
+              pushHistory(vSame);
+              setVerseDisplay(vSame);
+              blankMs = secToMsSafe(settings.transBlankSec || 0, 0);
+            }
+          }else{
+            let v;
+            if(settings.verseSource === 'curated'){
+              currentRef = pickCuratedRef();
+              const data = await fetchVerseByRef(currentRef, settings.translationId);
+              if(!isCurrentVerseRequest(rid) || !verseLoopRunning) return;
+              v = formatVersePayload(data);
+              v.reference = currentRef;
+            }else{
+              v = formatVersePayload(await fetchRandomVerse());
+            }
+            if(!isCurrentVerseRequest(rid) || !verseLoopRunning) return; // stale
+            pushHistory(v);
+            setVerseDisplay(v);
+            currentLoc = v.loc || currentLoc;
+            blankMs = secToMsSafe(settings.verseGapSec || 0, 0);
+          }
+
+          setStatus("ready");
+        }catch(e){
+          if(!isCurrentVerseRequest(rid) || !verseLoopRunning) return; // stale
+          setStatus("error");
+          els.refOut.textContent = "-";
+          els.verseOut.textContent = "Could not load verse.";
+          els.metaOut.textContent = String(e.message || e) + " - Check network/CORS on your host.";
+          blankMs = 1000;
+        }
+
+        // Blank time AFTER content is updated (hidden)
+        await wait(blankMs);
+        if(!verseLoopRunning) return;
+
+        // Fade IN new verse
+        setVerseVisible(true);
+
+        // Continue loop
+        run();
+
+      }, onMs);
+    };
+
+    run();
+  }
+
+  function applyBgFadeTiming(){
+    const fadeSec = Math.max(0, Number(settings.bgFadeSec || 0));
+    const ms = Math.round(fadeSec * 1000);
+    els.bgA.style.transitionDuration = ms + "ms";
+    els.bgB.style.transitionDuration = ms + "ms";
+  }
+
+
+  // ---------------------------
+  // Music (local MP3 playlist)
+  // ---------------------------
+  let audioA = new Audio();
+  let audioB = new Audio();
+  audioA.preload = "auto";
+  audioB.preload = "auto";
+  audioA.loop = false;
+  audioB.loop = false;
+
+  let activeAudio = audioA;
+  let idleAudio = audioB;
+
+  let musicQueue = [];
+  let musicTimer = null;
+  let musicStarted = false;
+
+  function encodePath(p){ return encodeURI(p); }
+
+  function rebuildMusicQueue(resetIndex=false){
+    const tracks = MUSIC_TRACKS.slice();
+    // deterministic-ish shuffle using a simple seed (stored) so reload doesn't always start same
+    if(settings.musicShuffle){
+      // Fisher-Yates
+      let seed = (settings.musicSeed || 0) + 1;
+      settings.musicSeed = seed;
+      saveSettings();
+      function rand(){
+        // LCG
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      }
+      for(let i = tracks.length - 1; i > 0; i--){
+        const j = Math.floor(rand() * (i + 1));
+        [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+      }
+    }
+    musicQueue = tracks;
+    if(resetIndex) settings.musicIndex = 0;
+  }
+
+  function applyMusicVolumes(){
+    const v = Math.max(0, Math.min(1, Number(settings.musicVolume ?? 0.65)));
+    activeAudio.volume = v;
+    idleAudio.volume = 0; // idle stays 0 until fade-in
+  }
+
+  function stopMusic(){
+    try{ clearTimeout(musicTimer); }catch(e){}
+    musicTimer = null;
+    [audioA, audioB].forEach(a => {
+      try{ a.pause(); }catch(e){}
+      try{ a.currentTime = 0; }catch(e){}
+    });
+    musicStarted = false;
+  }
+
+  function fadeVolumes(outAudio, inAudio, secs){
+    const dur = Math.max(0, secs) * 1000;
+    const start = performance.now();
+    const outStart = outAudio.volume;
+    const inTarget = Math.max(0, Math.min(1, Number(settings.musicVolume ?? 0.65)));
+    function step(now){
+      const t = dur === 0 ? 1 : Math.min(1, (now - start) / dur);
+      outAudio.volume = outStart * (1 - t);
+      inAudio.volume = inTarget * t;
+      if(t < 1){
+        requestAnimationFrame(step);
+      }else{
+        try{ outAudio.pause(); }catch(e){}
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function currentTrackName(){
+    if(!musicQueue.length) rebuildMusicQueue(true);
+    return musicQueue[settings.musicIndex % musicQueue.length];
+  }
+
+  function advanceTrackIndex(){
+    if(!musicQueue.length) rebuildMusicQueue(true);
+    settings.musicIndex = (settings.musicIndex + 1) % musicQueue.length;
+    saveSettings();
+  }
+
+  function scheduleCrossfade(){
+    try{ clearTimeout(musicTimer); }catch(e){}
+    musicTimer = null;
+
+    const cf = Math.max(0, Number(settings.musicCrossfadeSec ?? 2.0));
+    const a = activeAudio;
+
+    if(!isFinite(a.duration) || a.duration <= 0){
+      // wait for metadata
+      a.addEventListener("loadedmetadata", scheduleCrossfade, { once: true });
+      return;
+    }
+    const lead = Math.max(0, a.duration - cf);
+    musicTimer = setTimeout(() => {
+      startNextTrackCrossfade();
+    }, lead * 1000);
+  }
+
+  function startTrackOn(audioEl, filename, startVol){
+    audioEl.src = encodePath(filename);
+    audioEl.currentTime = 0;
+    audioEl.volume = startVol;
+
+    // Safety: if a track errors out or ends unexpectedly, advance.
+    audioEl.onerror = () => {
+      if(audioEl !== activeAudio) return;
+      try{ startNextTrackCrossfade(); }catch(e){}
+    };
+    audioEl.onended = () => {
+      if(audioEl !== activeAudio) return;
+      try{ startNextTrackCrossfade(); }catch(e){}
+    };
+
+    const p = audioEl.play();
+    if(p && p.catch){
+      p.catch(() => {
+        // iOS will block without gesture - we'll try again on tap
+        setStatus("tap to start audio");
+      });
+    }
+  }
+
+  function startMusicIfNeeded(){
+    if(musicStarted) return;
+    if(!settings.musicEnabled) return;
+    rebuildMusicQueue(false);
+    const track = currentTrackName();
+    startTrackOn(activeAudio, track, Math.max(0, Math.min(1, Number(settings.musicVolume ?? 0.65))));
+    musicStarted = true;
+    setStatus("playing");
+    // Once it actually starts, schedule crossfade
+    activeAudio.onplaying = () => {
+      activeAudio.onplaying = null;
+      scheduleCrossfade();
+    };
+  }
+
+  function startNextTrackCrossfade(){
+    if(!settings.musicEnabled) return;
+    const cf = Math.max(0, Number(settings.musicCrossfadeSec ?? 2.0));
+
+    // Prepare next
+    advanceTrackIndex();
+    const next = currentTrackName();
+
+    // swap active/idle
+    const outA = activeAudio;
+    const inA = idleAudio;
+
+    startTrackOn(inA, next, 0);
+
+    inA.onplaying = () => {
+      inA.onplaying = null;
+      fadeVolumes(outA, inA, cf);
+      // swap pointers
+      activeAudio = inA;
+      idleAudio = outA;
+      applyMusicVolumes();
+      scheduleCrossfade();
+    };
+  }
+
+  function setKenBurns(layerEl, durationSec, zoomAmount){
+    const z = Math.max(1.0, Number(zoomAmount || 1.1));
+    const d = Math.max(1, Number(durationSec || 20));
+
+    // Cancel any previous Ken Burns animation on this layer
+    try{
+      if(layerEl._kbAnim){
+        layerEl._kbAnim.cancel();
+        layerEl._kbAnim = null;
+      }
+    }catch(e){}
+
+    // Ensure a sane starting transform
+    layerEl.style.transform = "scale(1.02)";
+
+    // Use Web Animations API to avoid dynamic <style> keyframes (prevents snap-back bugs)
+    try{
+      layerEl._kbAnim = layerEl.animate(
+        [
+          { transform: "scale(1.02)" },
+          { transform: `scale(${z})` }
+        ],
+        {
+          duration: d * 1000,
+          easing: "linear",
+          fill: "forwards"
+        }
+      );
+    }catch(e){
+      // If Web Animations isn't available, fall back to no-zoom (still functional)
+      layerEl.style.transform = `scale(${z})`;
+    }
+  }
+
+  function showBackgroundAtIndex(idx, immediate=false){
+    const raw = BACKGROUND_IMAGES[idx % BACKGROUND_IMAGES.length];
+    const url = encodeURI(raw);
+
+    const layerIn = bgOnA ? els.bgA : els.bgB;
+    const layerOut = bgOnA ? els.bgB : els.bgA;
+
+    layerIn.style.backgroundImage = `url("${url}")`;
+    setKenBurns(layerIn, settings.bgStaySec, settings.bgZoom);
+
+    const fadeMs = Math.round(Math.max(0, Number(settings.bgFadeSec || 0)) * 1000);
+
+    // Ensure both are visible; new layer fades in, old fades out after fade duration.
+    layerIn.classList.add("on");
+    layerOut.classList.add("on");
+
+    // Cancel any prior fade-out timeout for this layer (prevents removing .on from the wrong layer)
+    if(layerOut._fadeTO){ try{ clearTimeout(layerOut._fadeTO); }catch(e){} layerOut._fadeTO = null; }
+
+    if(immediate || fadeMs === 0){
+      layerOut.classList.remove("on");
+      layerOut.style.animation = "none";
+    }else{
+      layerOut._fadeTO = setTimeout(() => {
+        layerOut._fadeTO = null;
+        layerOut.classList.remove("on");
+        layerOut.style.animation = "none";
+      }, fadeMs);
+    }
+    bgOnA = !bgOnA;
+  }
+
+  function stopBgLoop(){
+    if(bgLoopTimer){ try{ clearTimeout(bgLoopTimer); }catch(e){} bgLoopTimer = null; }
+  }
+
+  function startBgLoop(){
+    // Background loop is independent of verse loop (no verse timers are touched here).
+    stopBgLoop();
+    const staySec = Math.max(2, Number(settings.bgStaySec || 20));
+    showBackgroundAtIndex(settings.bgIndex, true);
+
+    const tick = () => {
+      bgLoopTimer = setTimeout(() => {
+        settings.bgIndex = (settings.bgIndex + 1) % BACKGROUND_IMAGES.length;
+        showBackgroundAtIndex(settings.bgIndex, false);
+        tick();
+      }, staySec * 1000);
+    };
+
+    tick();
+  }
+
+  function newBgNow(){
+    settings.bgIndex = (settings.bgIndex + 1) % BACKGROUND_IMAGES.length;
+    saveSettings();
+    showBackgroundAtIndex(settings.bgIndex, false);
+  }
+
+  async function restartLoops(forceNewVerse=false){
+    startBgLoop();
+    stopVerseLoop();
+    if(forceNewVerse) {
+      history = [];
+      historyIndex = -1;
+      await nextVerse();
+    }
+    startVerseLoop();
+  }
+
+  
+  let chromeTimer = null;
+  let chromeHidden = false;
+
+  function applyChromeVisibility(ensureShown=false){
+    // ensureShown: force visible (e.g., when settings opens)
+    if(!settings.fullScreenMode){
+      document.body.classList.remove("chromeHidden");
+      chromeHidden = false;
+      return;
+    }
+    if(ensureShown){
+      document.body.classList.remove("chromeHidden");
+      chromeHidden = false;
+      scheduleChromeHide();
+    }
+  }
+
+  function scheduleChromeHide(){
+    if(!settings.fullScreenMode) return;
+    if(chromeTimer) clearTimeout(chromeTimer);
+    chromeTimer = setTimeout(() => {
+      // Don't hide if settings panel is open
+      if(els.panelWrap.classList.contains("open")) return;
+      document.body.classList.add("chromeHidden");
+      chromeHidden = true;
+    }, 5000);
+  }
+
+  function bumpActivity(){
+    if(!settings.fullScreenMode) return;
+    document.body.classList.remove("chromeHidden");
+    chromeHidden = false;
+    scheduleChromeHide();
+  }
+function openPanel(){ els.panelWrap.classList.add("open"); applyChromeVisibility(true); }
+  function closePanel(){ els.panelWrap.classList.remove("open"); bumpActivity(); }
+
+  // Controls
+  
+  els.btnMusicToggle.addEventListener("click", () => {
+    settings.musicEnabled = settings.musicEnabled ? 0 : 1;
+    if(els.musicEnabled) els.musicEnabled.value = settings.musicEnabled ? "1" : "0";
+    saveSettings();
+    updateMusicToggleButton();
+    if(settings.musicEnabled){
+      startMusicIfNeeded();
+    }else{
+      stopMusic();
+    }
+    bumpActivity();
+  });
+
+els.btnSettings.addEventListener("click", () => {
+    bumpActivity();
+    els.panelWrap.classList.contains("open") ? closePanel() : openPanel();
+  });
+  els.btnClose.addEventListener("click", () => { bumpActivity(); closePanel(); });
+
+  function pageScrollPanel(dir){
+    const sc = els.panelScroll;
+    if(!sc) return;
+    const amt = Math.max(200, Math.floor(sc.clientHeight * 0.85));
+    sc.scrollBy({ top: dir * amt, left: 0, behavior: "smooth" });
+  }
+
+  els.btnPageUp.addEventListener("click", () => { bumpActivity(); pageScrollPanel(-1); });
+  els.btnPageDown.addEventListener("click", () => { bumpActivity(); pageScrollPanel(1); });
+
+
+  els.btnNext.addEventListener("click", async () => {
+    bumpActivity();
+    startMusicIfNeeded();
+    stopVerseLoop();
+    if(!forwardVerseFromHistory()) await nextVerse();
+    setVerseVisible(true);
+    startVerseLoop();
+  });
+
+  els.btnPrev.addEventListener("click", () => {
+    bumpActivity();
+    stopVerseLoop();
+    prevVerse();
+    setVerseVisible(true);
+    startVerseLoop();
+  });
+
+  els.tapArea.addEventListener("click", async (e) => {
+    const isTopbar = e.target.closest(".topbar");
+    const isPanel = e.target.closest(".panelWrap");
+    if(isTopbar || isPanel) return;
+    bumpActivity();
+    stopVerseLoop();
+    if(!forwardVerseFromHistory()) await nextVerse();
+    setVerseVisible(true);
+    startVerseLoop();
+  });
+
+  document.addEventListener("keydown", async (e) => {
+    bumpActivity();
+
+    // Fire TV remote support: PageUp/PageDown scroll settings panel
+    if(els.panelWrap.classList.contains("open")){
+      if(e.key === "PageUp"){ e.preventDefault(); pageScrollPanel(-1); return; }
+      if(e.key === "PageDown"){ e.preventDefault(); pageScrollPanel(1); return; }
+    }
+
+
+    startMusicIfNeeded();
+    if(e.key === "Escape") closePanel();
+    if(e.key === "s" || e.key === "S") {
+      els.panelWrap.classList.contains("open") ? closePanel() : openPanel();
+    }
+    if(e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      stopVerseLoop();
+      if(!forwardVerseFromHistory()) await nextVerse();
+      setVerseVisible(true);
+      startVerseLoop();
+    }
+    if(e.key === "ArrowLeft") {
+      stopVerseLoop(); prevVerse(); setVerseVisible(true); startVerseLoop();
+    }
+    if(e.key === "ArrowRight") {
+      stopVerseLoop();
+      if(!forwardVerseFromHistory()) await nextVerse();
+      setVerseVisible(true);
+      startVerseLoop();
+    }
+  });
+
+  els.translationSelect.addEventListener("change", async () => {
+    settings.translationId = els.translationSelect.value;
+    saveSettings();
+    await restartLoops(true);
+  });
+
+  
+  els.verseSource.addEventListener("change", async () => {
+    settings.verseSource = els.verseSource.value;
+    saveSettings();
+    await restartLoops(true);
+  });
+
+els.randomScope.addEventListener("change", async () => {
+    settings.randomScope = els.randomScope.value;
+    saveSettings();
+    await restartLoops(true);
+  });
+
+  els.uiScale.addEventListener("input", () => {
+    settings.uiScale = Number(els.uiScale.value);
+    saveSettings();
+    applySettingsToUI();
+  });
+
+  els.cycleMode.addEventListener("change", async () => {
+    settings.cycleMode = Number(els.cycleMode.value);
+    saveSettings();
+    await restartLoops(true);
+  });
+
+  const onCycleTChange = async () => {
+    settings.cycleT1 = els.cycleT1.value;
+    settings.cycleT2 = els.cycleT2.value;
+    settings.cycleT3 = els.cycleT3.value;
+    saveSettings();
+    await restartLoops(true);
+  };
+  els.cycleT1.addEventListener("change", onCycleTChange);
+  els.cycleT2.addEventListener("change", onCycleTChange);
+  els.cycleT3.addEventListener("change", onCycleTChange);
+
+  els.transBlankSec.addEventListener("change", async () => {
+    settings.transBlankSec = Math.max(0, Number(els.transBlankSec.value || 0));
+    saveSettings();
+    await restartLoops(false);
+  });
+
+  els.verseGapSec.addEventListener("change", async () => {
+    settings.verseGapSec = Math.max(0, Number(els.verseGapSec.value || 0));
+    settings.verseBlankSec = settings.verseGapSec; // keep legacy in sync
+    if(els.verseBlankSec) els.verseBlankSec.value = settings.verseGapSec;
+    saveSettings();
+    await restartLoops(false);
+  });
+
+
+
+  els.verseSize.addEventListener("input", () => {
+    settings.verseSize = Number(els.verseSize.value);
+    saveSettings();
+    applySettingsToUI();
+  });
+
+  els.refSize.addEventListener("input", () => {
+    settings.refSize = Number(els.refSize.value);
+    saveSettings();
+    applySettingsToUI();
+  });
+
+  els.verseFont.addEventListener("change", () => {
+    settings.verseFontCss = els.verseFont.value;
+    saveSettings();
+    applySettingsToUI();
+  });
+
+  els.refFont.addEventListener("change", () => {
+    settings.refFontCss = els.refFont.value;
+    saveSettings();
+    applySettingsToUI();
+  });
+
+  els.menuOpacity.addEventListener("input", () => {
+    settings.menuOpacity = Number(els.menuOpacity.value);
+    saveSettings();
+    document.documentElement.style.setProperty("--menu-opacity", String(settings.menuOpacity));
+  });
+
+  els.fullScreenMode.addEventListener("change", () => {
+    settings.fullScreenMode = Number(els.fullScreenMode.value);
+    saveSettings();
+    // Show chrome immediately then schedule hide
+    bumpActivity();
+    applyChromeVisibility(true);
+  });
+
+
+  els.bgShadeStrength.addEventListener("input", () => {
+    settings.bgShadeStrength = Number(els.bgShadeStrength.value);
+    saveSettings();
+    document.documentElement.style.setProperty("--bg-shade-strength", String(settings.bgShadeStrength));
+  });
+
+  els.textColor.addEventListener("input", () => {
+    settings.textColor = els.textColor.value;
+    saveSettings();
+    document.documentElement.style.setProperty("--text-color", settings.textColor);
+  });
+
+  els.textShadowOn.addEventListener("change", () => {
+    settings.textShadowOn = Number(els.textShadowOn.value);
+    saveSettings();
+    const ss = settings.textShadowOn ? (Number(settings.textShadowStrength)||0) : 0;
+    document.documentElement.style.setProperty("--text-shadow-strength", ss + "px");
+  });
+
+  els.textShadowStrength.addEventListener("input", () => {
+    settings.textShadowStrength = Number(els.textShadowStrength.value);
+    saveSettings();
+    const ss = settings.textShadowOn ? settings.textShadowStrength : 0;
+    document.documentElement.style.setProperty("--text-shadow-strength", ss + "px");
+  });
+
+  els.textStrokeWidth.addEventListener("input", () => {
+    settings.textStrokeWidth = Number(els.textStrokeWidth.value);
+    saveSettings();
+    document.documentElement.style.setProperty("--text-stroke-width", settings.textStrokeWidth + "px");
+  });
+
+  els.textStrokeColor.addEventListener("input", () => {
+    settings.textStrokeColor = els.textStrokeColor.value;
+    saveSettings();
+    document.documentElement.style.setProperty("--text-stroke-color", settings.textStrokeColor);
+  });
+
+  els.verseOnSec.addEventListener("change", async () => {
+    settings.verseOnSec = Math.max(1, Number(els.verseOnSec.value || 1));
+    saveSettings();
+    await restartLoops(false);
+  });
+
+  els.verseBlankSec.addEventListener("change", async () => {
+    // Legacy control now maps to gap between NEW verses
+    settings.verseGapSec = Math.max(0, Number(els.verseBlankSec.value || 0));
+    settings.verseBlankSec = settings.verseGapSec;
+    if(els.verseGapSec) els.verseGapSec.value = settings.verseGapSec;
+    saveSettings();
+    await restartLoops(false);
+  });
+
+els.bgStaySec.addEventListener("change", async () => {
+    settings.bgStaySec = Math.max(2, Number(els.bgStaySec.value || 2));
+    saveSettings();
+    await restartLoops(false);
+  });
+
+  els.bgFadeSec.addEventListener("change", () => {
+    settings.bgFadeSec = Math.max(0, Number(els.bgFadeSec.value || 0));
+    saveSettings();
+    applyBgFadeTiming();
+  });
+
+  els.bgZoom.addEventListener("input", () => {
+    settings.bgZoom = Number(els.bgZoom.value);
+    saveSettings();
+  });
+
+
+  els.musicEnabled.addEventListener("change", () => {
+    settings.musicEnabled = Number(els.musicEnabled.value);
+    saveSettings();
+    if(settings.musicEnabled){
+      // start music on next user gesture
+      setStatus("music ready (tap)");
+    }else{
+      stopMusic();
+      setStatus("music off");
+    }
+  });
+
+  els.musicVolume.addEventListener("input", () => {
+    settings.musicVolume = Number(els.musicVolume.value);
+    saveSettings();
+    applyMusicVolumes();
+  });
+
+  els.musicShuffle.addEventListener("change", () => {
+    settings.musicShuffle = Number(els.musicShuffle.value);
+    saveSettings();
+    rebuildMusicQueue(true);
+  });
+
+  els.musicCrossfadeSec.addEventListener("input", () => {
+    settings.musicCrossfadeSec = Number(els.musicCrossfadeSec.value);
+    saveSettings();
+  });
+
+  els.btnNewBg.addEventListener("click", () => {
+    bumpActivity();
+    newBgNow();
+  });
+
+  els.btnReset.addEventListener("click", () => {
+    bumpActivity();
+    resetSettings();
+  });
+
+  // INIT (robust: never blank)
+  setStatus("starting");
+  populateFontSelects();
+  populateTranslationSelectImmediate();
+  applySettingsToUI();
+  // Start chrome auto-hide timer if enabled
+  scheduleChromeHide();
+
+  // Start background immediately
+  showBackgroundAtIndex(settings.bgIndex, true);
+  startBgLoop();
+
+  // Load verse immediately
+  nextVerse().then(() => {
+    setVerseVisible(true);
+    startVerseLoop();
+    setStatus("ready");
+  });
+
+  // Try to refine translation list (non-blocking)
+  refineTranslationListFromApi();
+
+})();
+
+</script>
+</body>
+</html>
